@@ -1,4 +1,6 @@
-import { useState } from 'react';
+// src/components/ClientDashboard.tsx
+import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -7,45 +9,99 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Progress } from './ui/progress';
 import { Separator } from './ui/separator';
-import { 
-  Search, 
-  MapPin, 
-  Star, 
-  Clock, 
-  DollarSign, 
-  FileText, 
-  Phone, 
+import {
+  Search,
+  MapPin,
+  Star,
+  Clock,
+  DollarSign,
+  FileText,
+  Phone,
   MessageCircle,
   LogOut,
   Wrench,
   Users,
   Navigation,
-  CheckCircle} from 'lucide-react';
+  CheckCircle,
+} from 'lucide-react';
+
+import { useAuth } from '@/context/AuthContext';
+import { createServiceRequest, type CreateServiceRequestDto } from '@/services/ServiceRequestApi';
 
 interface ClientDashboardProps {
   onLogout: () => void;
 }
 
 export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
   const [activeTab, setActiveTab] = useState('home');
   const [serviceRequest, setServiceRequest] = useState<'idle' | 'searching' | 'found' | 'in-progress'>('idle');
   const [searchProgress, setSearchProgress] = useState(0);
 
-  const handleRequestService = () => {
-    setServiceRequest('searching');
-    setSearchProgress(0);
-    
-    // Simulate search progress
-    const interval = setInterval(() => {
-      setSearchProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setServiceRequest('found');
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 300);
+  // 🧭 campos controlados del formulario
+  const [serviceId, setServiceId] = useState<number>(1);
+  const [description, setDescription] = useState('');
+  const [location, setLocation] = useState('');
+  const [urgency, setUrgency] = useState<'Alta' | 'Media' | 'Baja'>('Alta');
+  const [estimatedDuration, setEstimatedDuration] = useState('2 horas');
+  const [budget, setBudget] = useState('$150');
+  const [loading, setLoading] = useState(false);
+
+  // redirección si no hay sesión
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) navigate('/login');
+  }, [navigate]);
+
+  const handleRequestService = async () => {
+    if (!user?.userId) {
+      navigate('/login');
+      return;
+    }
+    if (!description.trim() || !location.trim()) {
+      alert('Por favor completa la descripción y la ubicación.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const payload: CreateServiceRequestDto = {
+        clientId: user.userId,
+        serviceId,
+        contractorId: null, // aún no asignado
+        description: description.trim(),
+        location: location.trim(),
+        urgency,
+        estimatedDuration,
+        budget,
+        requestDate: new Date().toISOString(),
+        serviceDate: null,
+        isActive: true,
+      };
+
+      await createServiceRequest(payload);
+
+      // feedback visual como tenías antes
+      setServiceRequest('searching');
+      setSearchProgress(0);
+      const interval = setInterval(() => {
+        setSearchProgress((prev) => {
+          if (prev >= 100) {
+            clearInterval(interval);
+            setServiceRequest('found');
+            return 100;
+          }
+          return prev + 12;
+        });
+      }, 250);
+    } catch (err) {
+      console.error('Error creando la solicitud', err);
+      alert('No pudimos crear la solicitud. Intenta de nuevo.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAcceptContractor = () => {
@@ -62,7 +118,7 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
       distance: '2.3 km',
       hourlyRate: '$25-35',
       available: true,
-      avatar: '/api/placeholder/40/40'
+      avatar: '/api/placeholder/40/40',
     },
     {
       id: 2,
@@ -73,7 +129,7 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
       distance: '1.8 km',
       hourlyRate: '$20-30',
       available: true,
-      avatar: '/api/placeholder/40/40'
+      avatar: '/api/placeholder/40/40',
     },
     {
       id: 3,
@@ -84,8 +140,8 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
       distance: '3.1 km',
       hourlyRate: '$30-45',
       available: false,
-      avatar: '/api/placeholder/40/40'
-    }
+      avatar: '/api/placeholder/40/40',
+    },
   ];
 
   const mockDocuments = [
@@ -95,7 +151,7 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
       contractor: 'Carlos Rodríguez',
       amount: '$450',
       date: '2024-01-15',
-      status: 'Pendiente'
+      status: 'Pendiente',
     },
     {
       id: 2,
@@ -103,7 +159,7 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
       contractor: 'María González',
       amount: '$280',
       date: '2024-01-10',
-      status: 'Pagada'
+      status: 'Pagada',
     },
     {
       id: 3,
@@ -111,8 +167,8 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
       contractor: 'Luis Méndez',
       amount: '$650',
       date: '2024-01-08',
-      status: 'Revisión'
-    }
+      status: 'Revisión',
+    },
   ];
 
   return (
@@ -175,33 +231,83 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                     <>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Tipo de Servicio</label>
-                        <select className="w-full p-3 border rounded-lg">
-                          <option>Fontanería</option>
-                          <option>Electricidad</option>
-                          <option>Pintura</option>
-                          <option>Construcción</option>
-                          <option>Reparaciones</option>
+                        <select
+                          className="w-full p-3 border rounded-lg"
+                          value={serviceId}
+                          onChange={(e) => setServiceId(Number(e.target.value))}
+                        >
+                          <option value={1}>Fontanería</option>
+                          <option value={2}>Electricidad</option>
+                          <option value={3}>Pintura</option>
+                          <option value={4}>Construcción</option>
+                          <option value={5}>Reparaciones</option>
                         </select>
                       </div>
+
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Descripción del Proyecto</label>
-                        <textarea 
+                        <textarea
                           className="w-full p-3 border rounded-lg h-24 resize-none"
                           placeholder="Describe detalladamente lo que necesitas..."
+                          value={description}
+                          onChange={(e) => setDescription(e.target.value)}
                         />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Ubicación</label>
-                        <div className="flex gap-2">
-                          <Input placeholder="Dirección o código postal" className="flex-1" />
-                          <Button variant="outline" size="icon">
-                            <MapPin className="w-4 h-4" />
-                          </Button>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Urgencia</label>
+                          <select
+                            className="w-full p-3 border rounded-lg"
+                            value={urgency}
+                            onChange={(e) => setUrgency(e.target.value as 'Alta' | 'Media' | 'Baja')}
+                          >
+                            <option value="Alta">Alta</option>
+                            <option value="Media">Media</option>
+                            <option value="Baja">Baja</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Duración estimada</label>
+                          <Input
+                            placeholder="Ej: 2 horas"
+                            value={estimatedDuration}
+                            onChange={(e) => setEstimatedDuration(e.target.value)}
+                          />
                         </div>
                       </div>
-                      <Button onClick={handleRequestService} className="w-full bg-blue-600 hover:bg-blue-700">
-                        <Search className="w-4 h-4 mr-2" />
-                        Buscar Contratista
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Presupuesto</label>
+                          <Input
+                            placeholder="Ej: $150"
+                            value={budget}
+                            onChange={(e) => setBudget(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Ubicación</label>
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Dirección o código postal"
+                              className="flex-1"
+                              value={location}
+                              onChange={(e) => setLocation(e.target.value)}
+                            />
+                            <Button type="button" variant="outline" size="icon">
+                              <MapPin className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Button
+                        onClick={handleRequestService}
+                        disabled={loading}
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                      >
+                        {loading ? 'Enviando...' : (<><Search className="w-4 h-4 mr-2" /> Buscar Contratista</>)}
                       </Button>
                     </>
                   )}
@@ -212,7 +318,9 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                         <Search className="w-8 h-8 text-blue-600 animate-pulse" />
                       </div>
                       <h3 className="text-lg font-semibold mb-2">Buscando contratistas...</h3>
-                      <p className="text-muted-foreground mb-4">Estamos encontrando los mejores profesionales para ti</p>
+                      <p className="text-muted-foreground mb-4">
+                        Estamos encontrando los mejores profesionales para ti
+                      </p>
                       <Progress value={searchProgress} className="w-full" />
                       <p className="text-sm text-muted-foreground mt-2">{searchProgress}% completado</p>
                     </div>
@@ -257,7 +365,9 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                         <Navigation className="w-8 h-8 text-blue-600" />
                       </div>
                       <h3 className="text-lg font-semibold mb-2">Contratista en camino</h3>
-                      <p className="text-muted-foreground mb-4">Carlos llegará en aproximadamente 15 minutos</p>
+                      <p className="text-muted-foreground mb-4">
+                        Carlos llegará en aproximadamente 15 minutos
+                      </p>
                       <div className="bg-gray-50 rounded-lg p-4 mb-4">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium">Tiempo estimado:</span>
@@ -314,7 +424,9 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                         <div key={contractor.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                           <Avatar className="w-8 h-8">
                             <AvatarImage src={contractor.avatar} />
-                            <AvatarFallback>{contractor.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                            <AvatarFallback>
+                              {contractor.name.split(' ').map((n) => n[0]).join('')}
+                            </AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
                             <div className="font-medium text-sm">{contractor.name}</div>
@@ -340,9 +452,7 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
             <Card>
               <CardHeader>
                 <CardTitle>Contratistas Disponibles</CardTitle>
-                <CardDescription>
-                  Explora y contacta contratistas cerca de ti
-                </CardDescription>
+                <CardDescription>Explora y contacta contratistas cerca de ti</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -364,7 +474,9 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                           <div className="flex items-start gap-4">
                             <Avatar className="w-12 h-12">
                               <AvatarImage src={contractor.avatar} />
-                              <AvatarFallback>{contractor.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                              <AvatarFallback>
+                                {contractor.name.split(' ').map((n) => n[0]).join('')}
+                              </AvatarFallback>
                             </Avatar>
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
@@ -381,7 +493,9 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                               </div>
                               <div className="flex flex-wrap gap-2 mb-2">
                                 {contractor.specialties.map((specialty) => (
-                                  <Badge key={specialty} variant="outline">{specialty}</Badge>
+                                  <Badge key={specialty} variant="outline">
+                                    {specialty}
+                                  </Badge>
                                 ))}
                               </div>
                               <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -425,9 +539,7 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
             <Card>
               <CardHeader>
                 <CardTitle>Cotizaciones, Proformas y Facturas</CardTitle>
-                <CardDescription>
-                  Gestiona todos los documentos enviados por los contratistas
-                </CardDescription>
+                <CardDescription>Gestiona todos los documentos enviados por los contratistas</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -447,22 +559,32 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                           </div>
                           <div className="text-right">
                             <div className="text-lg font-semibold">{doc.amount}</div>
-                            <Badge 
-                              variant={doc.status === 'Pagada' ? 'default' : doc.status === 'Pendiente' ? 'secondary' : 'outline'}
+                            <Badge
+                              variant={
+                                doc.status === 'Pagada' ? 'default' : doc.status === 'Pendiente' ? 'secondary' : 'outline'
+                              }
                               className={
-                                doc.status === 'Pagada' ? 'bg-green-100 text-green-700' :
-                                doc.status === 'Pendiente' ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-gray-100 text-gray-700'
+                                doc.status === 'Pagada'
+                                  ? 'bg-green-100 text-green-700'
+                                  : doc.status === 'Pendiente'
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : 'bg-gray-100 text-gray-700'
                               }
                             >
                               {doc.status}
                             </Badge>
                           </div>
                           <div className="flex gap-2">
-                            <Button variant="outline" size="sm">Ver</Button>
-                            <Button variant="outline" size="sm">Descargar</Button>
+                            <Button variant="outline" size="sm">
+                              Ver
+                            </Button>
+                            <Button variant="outline" size="sm">
+                              Descargar
+                            </Button>
                             {doc.status === 'Pendiente' && (
-                              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">Pagar</Button>
+                              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                                Pagar
+                              </Button>
                             )}
                           </div>
                         </div>
@@ -479,9 +601,7 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
             <Card>
               <CardHeader>
                 <CardTitle>Historial de Servicios</CardTitle>
-                <CardDescription>
-                  Revisa todos los servicios que has solicitado
-                </CardDescription>
+                <CardDescription>Revisa todos los servicios que has solicitado</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">

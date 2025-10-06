@@ -1,3 +1,4 @@
+// src/components/ContractorDashboard.tsx
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -7,14 +8,13 @@ import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Textarea } from './ui/textarea';
-// import { Separator } from './ui/separator';
-import { 
-  Bell, 
-  Star, 
-  Clock, 
-  DollarSign, 
-  FileText, 
-  Send, 
+import {
+  Bell,
+  Star,
+  Clock,
+  DollarSign,
+  FileText,
+  Send,
   Plus,
   LogOut,
   Wrench,
@@ -24,9 +24,9 @@ import {
   XCircle,
   Calculator,
   Receipt,
-  FileCheck
+  FileCheck,
 } from 'lucide-react';
-import { getServiceRequests } from '../services/ContractorService';
+import { getServiceRequests } from '@/services/ServiceRequestApi';
 
 interface ContractorDashboardProps {
   onLogout: () => void;
@@ -47,46 +47,50 @@ interface ServiceRequest {
 export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
   const [activeTab, setActiveTab] = useState('requests');
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
-  const [documentType, setDocumentType] = useState<'cotizacion' | 'factura' | 'proforma'>('cotizacion');
+  const [documentType, setDocumentType] =
+    useState<'cotizacion' | 'factura' | 'proforma'>('cotizacion');
   const [serviceItems, setServiceItems] = useState([{ description: '', hours: '', rate: '' }]);
 
+  // 🔄 Carga inicial + polling cada 8s
   useEffect(() => {
-  const fetchRequests = async () => {
-    try {
-      const data = await getServiceRequests();
-      console.log('📦 Datos recibidos:', data); // 👈 esto ayuda
-      setRequests(data);
-    } catch (error) {
-      console.error('Error al obtener solicitudes:', error);
-    }
-  };
+    let stopped = false;
 
-  fetchRequests();
-}, []);
+    const fetchRequests = async () => {
+      try {
+        const data = await getServiceRequests();
+        if (!stopped) {
+          setRequests(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        console.error('Error al obtener solicitudes:', error);
+      }
+    };
 
-  const addServiceItem = () => {
-    setServiceItems([...serviceItems, { description: '', hours: '', rate: '' }]);
-  };
+    fetchRequests();
+    const id = setInterval(fetchRequests, 8000);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
+  }, []);
 
-  const removeServiceItem = (index: number) => {
-    setServiceItems(serviceItems.filter((_, i) => i !== index));
-  };
+  const addServiceItem = () =>
+    setServiceItems((prev) => [...prev, { description: '', hours: '', rate: '' }]);
 
-  const updateServiceItem = (index: number, field: string, value: string) => {
-    const updated = [...serviceItems];
-    updated[index] = { ...updated[index], [field]: value };
-    setServiceItems(updated);
-  };
+  const removeServiceItem = (index: number) =>
+    setServiceItems((prev) => prev.filter((_, i) => i !== index));
 
-  const calculateTotal = () => {
-    return serviceItems.reduce((total, item) => {
+  const updateServiceItem = (index: number, field: string, value: string) =>
+    setServiceItems((prev) =>
+      prev.map((it, i) => (i === index ? { ...it, [field]: value } : it))
+    );
+
+  const calculateTotal = () =>
+    serviceItems.reduce((total, item) => {
       const hours = parseFloat(item.hours) || 0;
       const rate = parseFloat(item.rate) || 0;
-      return total + (hours * rate);
+      return total + hours * rate;
     }, 0);
-  };
-
-
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -117,170 +121,138 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
       <div className="max-w-6xl mx-auto p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid grid-cols-4 w-fit mb-6">
-            <TabsTrigger value="requests"><Bell className="w-4 h-4 mr-2" /> Solicitudes</TabsTrigger>
-            <TabsTrigger value="documents"><FileText className="w-4 h-4 mr-2" /> Documentos</TabsTrigger>
-            <TabsTrigger value="dashboard"><Star className="w-4 h-4 mr-2" /> Mi Panel</TabsTrigger>
-            <TabsTrigger value="profile"><User className="w-4 h-4 mr-2" /> Perfil</TabsTrigger>
+            <TabsTrigger value="requests" className="flex items-center gap-2">
+              <Bell className="w-4 h-4" />
+              Solicitudes
+            </TabsTrigger>
+            <TabsTrigger value="documents" className="flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Documentos
+            </TabsTrigger>
+            <TabsTrigger value="dashboard" className="flex items-center gap-2">
+              <Star className="w-4 h-4" />
+              Mi Panel
+            </TabsTrigger>
+            <TabsTrigger value="profile" className="flex items-center gap-2">
+              <User className="w-4 h-4" />
+              Perfil
+            </TabsTrigger>
           </TabsList>
 
-          {/* Tab: Solicitudes */}
+          {/* Service Requests Tab */}
           <TabsContent value="requests">
-            <Card>
-              <CardHeader>
-                <CardTitle><Bell className="w-5 h-5 text-green-600" /> Solicitudes Pendientes</CardTitle>
-                <CardDescription>Revisa y responde a las solicitudes de servicio</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {requests.map((request) => (
-                    <Card key={request.requestId} className="border-l-4 border-l-green-500">
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-start mb-4">
-                          <div className="flex items-center gap-3">
-                            <Avatar>
-                              <AvatarImage src="/api/placeholder/40/40" />
-                              <AvatarFallback>
-                                {request.clientName
-                                  .split(' ')
-                                  .map((n) => n[0])
-                                  .join('')
-                                  .toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <h3 className="font-semibold">{request.clientName}</h3>
-                              <p className="text-sm text-muted-foreground">{request.requestTime}</p>
-                            </div>
-                          </div>
-                          <Badge variant={request.urgency === 'Alta' ? 'destructive' : 'secondary'}>
-                            Urgencia {request.urgency}
-                          </Badge>
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-4 mb-4">
-                          <div>
-                            <h4 className="font-medium mb-2">{request.serviceName}</h4>
-                            <p className="text-sm text-muted-foreground mb-3">{request.description}</p>
-                            <div className="space-y-2 text-sm">
-                              <div className="flex items-center gap-2">
-                                <MapPin className="w-4 h-4 text-muted-foreground" />
-                                <span>{request.location}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Clock className="w-4 h-4 text-muted-foreground" />
-                                <span>{request.estimatedDuration}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <DollarSign className="w-4 h-4 text-muted-foreground" />
-                                <span>{request.budget}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-3">
-                          <Button variant="outline" className="flex-1">
-                            <XCircle className="w-4 h-4 mr-2" />
-                            Declinar
-                          </Button>
-                          <Button className="flex-1 bg-green-600 hover:bg-green-700">
-                            <CheckCircle className="w-4 h-4 mr-2" />
-                            Aceptar Solicitud
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Tab: Documentos */}
-          <TabsContent value="documents">
-            <Card>
-              <CardHeader>
-                <CardTitle>Crear Documento</CardTitle>
-                <CardDescription>Genera cotizaciones, facturas o proformas</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-3 gap-2">
-                  {['cotizacion', 'factura', 'proforma'].map((type) => (
-                    <Button
-                      key={type}
-                      variant={documentType === type ? 'default' : 'outline'}
-                      className={documentType === type ? 'bg-green-600 hover:bg-green-700' : ''}
-                      onClick={() => setDocumentType(type as any)}
-                    >
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </Button>
-                  ))}
-                </div>
-
-                <div>
-                  <Label>Cliente</Label>
-                  <select className="w-full p-2 border rounded-lg">
-                    <option>Seleccionar cliente...</option>
-                    {requests.map((request) => (
-                      <option key={request.requestId} value={request.requestId}>
-                        {request.clientName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <Label>Descripción del Proyecto</Label>
-                <Textarea placeholder="Describe el trabajo..." />
-
-                <div className="flex justify-between items-center">
-                  <Label>Servicios</Label>
-                  <Button onClick={addServiceItem} variant="outline" size="sm">
-                    <Plus className="w-4 h-4 mr-1" /> Agregar
-                  </Button>
-                </div>
-
-                {serviceItems.map((item, index) => (
-                  <div key={index} className="bg-gray-100 p-3 rounded-lg space-y-2">
-                    <Input
-                      placeholder="Descripción"
-                      value={item.description}
-                      onChange={(e) => updateServiceItem(index, 'description', e.target.value)}
-                    />
-                    <div className="flex gap-2">
-                      <Input
-                        type="number"
-                        placeholder="Horas"
-                        value={item.hours}
-                        onChange={(e) => updateServiceItem(index, 'hours', e.target.value)}
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Tarifa"
-                        value={item.rate}
-                        onChange={(e) => updateServiceItem(index, 'rate', e.target.value)}
-                      />
-                    </div>
-                    <div className="text-right text-sm font-medium">
-                      Subtotal: ${(parseFloat(item.hours) * parseFloat(item.rate)).toFixed(2)}
-                    </div>
-                    {serviceItems.length > 1 && (
-                      <Button variant="ghost" onClick={() => removeServiceItem(index)}>
-                        <XCircle className="w-4 h-4" />
-                      </Button>
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-green-600" />
+                    Solicitudes Pendientes
+                  </CardTitle>
+                  <CardDescription>
+                    Revisa y responde a las solicitudes de servicio
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {requests.length === 0 && (
+                      <div className="text-sm text-muted-foreground">
+                        No hay solicitudes por el momento.
+                      </div>
                     )}
+
+                    {requests.map((request) => (
+                      <Card key={request.requestId} className="border-l-4 border-l-green-500">
+                        <CardContent className="p-4">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="flex items-center gap-3">
+                              <Avatar>
+                                <AvatarImage src="/api/placeholder/40/40" />
+                                <AvatarFallback>
+                                  {request.clientName
+                                    ?.split(' ')
+                                    .map((n) => n[0])
+                                    .join('')
+                                    .slice(0, 2)
+                                    .toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <h3 className="font-semibold">{request.clientName}</h3>
+                                <p className="text-sm text-muted-foreground">{request.requestTime}</p>
+                              </div>
+                            </div>
+                            <Badge
+                              variant={
+                                request.urgency === 'Alta'
+                                  ? 'destructive'
+                                  : request.urgency === 'Media'
+                                  ? 'secondary'
+                                  : 'default'
+                              }
+                            >
+                              Urgencia {request.urgency}
+                            </Badge>
+                          </div>
+
+                          <div className="grid md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <h4 className="font-medium mb-2">{request.serviceName}</h4>
+                              <p className="text-sm text-muted-foreground mb-3">
+                                {request.description}
+                              </p>
+
+                              <div className="space-y-2 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="w-4 h-4 text-muted-foreground" />
+                                  <span>{request.location}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Clock className="w-4 h-4 text-muted-foreground" />
+                                  <span>{request.estimatedDuration}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <DollarSign className="w-4 h-4 text-muted-foreground" />
+                                  <span>{request.budget}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="bg-gray-50 rounded-lg p-4">
+                              <h5 className="font-medium mb-2">Detalles de la Solicitud</h5>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span>Servicio:</span>
+                                  <span className="font-medium">{request.serviceName}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Cliente:</span>
+                                  <span className="font-medium">{request.clientName}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Urgencia:</span>
+                                  <span className="font-medium">{request.urgency}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-3">
+                            <Button variant="outline" className="flex-1">
+                              <XCircle className="w-4 h-4 mr-2" />
+                              Declinar
+                            </Button>
+                            <Button className="flex-1 bg-green-600 hover:bg-green-700">
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                              Aceptar Solicitud
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
-                ))}
-
-                <div className="text-right text-lg font-bold text-green-700">
-                  Total: ${calculateTotal().toFixed(2)}
-                </div>
-
-                <Button className="w-full bg-green-600 hover:bg-green-700">
-                  <Send className="w-4 h-4 mr-2" />
-                  Enviar {documentType.charAt(0).toUpperCase() + documentType.slice(1)}
-                </Button>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           {/* Documents Tab */}
@@ -331,22 +303,8 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="client">Cliente</Label>
-                    <select id="client" className="w-full p-2 border rounded-lg">
-                      <option>Seleccionar cliente...</option>
-                      {requests.map((client: any) => (
-                        <option key={client.id} value={client.id}>{client.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
                     <Label htmlFor="project">Descripción del Proyecto</Label>
-                    <Textarea 
-                      id="project"
-                      placeholder="Describe el trabajo realizado o a realizar..."
-                      className="h-20"
-                    />
+                    <Textarea id="project" placeholder="Describe el trabajo..." className="h-20" />
                   </div>
 
                   <div className="space-y-4">
@@ -363,12 +321,7 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
                         <div className="flex justify-between items-center">
                           <h5 className="font-medium">Item {index + 1}</h5>
                           {serviceItems.length > 1 && (
-                            <Button 
-                              type="button" 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => removeServiceItem(index)}
-                            >
+                            <Button type="button" variant="outline" size="sm" onClick={() => removeServiceItem(index)}>
                               <XCircle className="w-4 h-4" />
                             </Button>
                           )}
@@ -405,20 +358,14 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
                     <div className="bg-green-50 rounded-lg p-4">
                       <div className="flex justify-between items-center">
                         <span className="font-semibold">Total:</span>
-                        <span className="text-xl font-bold text-green-600">
-                          ${calculateTotal().toFixed(2)}
-                        </span>
+                        <span className="text-xl font-bold text-green-600">${calculateTotal().toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="notes">Notas Adicionales</Label>
-                    <Textarea 
-                      id="notes"
-                      placeholder="Términos y condiciones, garantías, etc."
-                      className="h-16"
-                    />
+                    <Textarea id="notes" placeholder="Términos y condiciones, garantías, etc." className="h-16" />
                   </div>
 
                   <Button className="w-full bg-green-600 hover:bg-green-700">
@@ -431,16 +378,14 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
               <Card>
                 <CardHeader>
                   <CardTitle>Documentos Enviados</CardTitle>
-                  <CardDescription>
-                    Historial de cotizaciones, facturas y proformas
-                  </CardDescription>
+                  <CardDescription>Historial de cotizaciones, facturas y proformas</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
                     {[
                       { type: 'Cotización', client: 'Ana Martínez', amount: '$450', date: '2024-01-15', status: 'Pendiente' },
                       { type: 'Factura', client: 'Pedro López', amount: '$320', date: '2024-01-14', status: 'Pagada' },
-                      { type: 'Proforma', client: 'María García', amount: '$680', date: '2024-01-13', status: 'Enviada' }
+                      { type: 'Proforma', client: 'María García', amount: '$680', date: '2024-01-13', status: 'Enviada' },
                     ].map((doc, index) => (
                       <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center gap-3">
@@ -454,7 +399,7 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
                         </div>
                         <div className="text-right">
                           <div className="font-semibold">{doc.amount}</div>
-                          <Badge 
+                          <Badge
                             variant={doc.status === 'Pagada' ? 'default' : 'secondary'}
                             className={doc.status === 'Pagada' ? 'bg-green-100 text-green-700' : ''}
                           >
@@ -544,9 +489,7 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
             <Card>
               <CardHeader>
                 <CardTitle>Mi Perfil Profesional</CardTitle>
-                <CardDescription>
-                  Administra tu información y especialidades
-                </CardDescription>
+                <CardDescription>Administra tu información y especialidades</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">
@@ -575,7 +518,7 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
 
                 <div className="space-y-2">
                   <Label htmlFor="bio">Descripción Profesional</Label>
-                  <Textarea 
+                  <Textarea
                     id="bio"
                     defaultValue="Especialista en fontanería y electricidad con más de 8 años de experiencia. Trabajo rápido y eficiente, garantía en todos mis servicios."
                     className="h-20"
@@ -587,9 +530,7 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
                   <Input id="hourlyRate" type="number" defaultValue="25" />
                 </div>
 
-                <Button className="bg-green-600 hover:bg-green-700">
-                  Guardar Cambios
-                </Button>
+                <Button className="bg-green-600 hover:bg-green-700">Guardar Cambios</Button>
               </CardContent>
             </Card>
           </TabsContent>

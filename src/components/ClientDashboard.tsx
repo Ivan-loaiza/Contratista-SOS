@@ -1,14 +1,14 @@
 // src/components/ClientDashboard.tsx
-import { useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Badge } from './ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Progress } from './ui/progress';
-import { Separator } from './ui/separator';
+import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Badge } from "./ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Progress } from "./ui/progress";
+import { Separator } from "./ui/separator";
 import {
   Search,
   MapPin,
@@ -23,10 +23,32 @@ import {
   Users,
   Navigation,
   CheckCircle,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { useAuth } from '@/context/AuthContext';
-import { createServiceRequest, type CreateServiceRequestDto } from '@/services/ServiceRequestApi';
+import { useAuth } from "@/context/AuthContext";
+import { createServiceRequest, type CreateServiceRequestDto } from "@/services/ServiceRequestApi";
+import { createSocket } from "@/lib/socket";
+import Swal from "sweetalert2";
+import { listDocumentsForClient } from "@/services/ClientDocumentService";
+
+
+type ClientDocumentDto = {
+  id: number;
+  requestId: number;
+  // "cotizacion" | "factura" | "proforma"
+  kind: "cotizacion" | "factura" | "proforma";
+  // nombre del contratista que lo envió
+  contractorName: string;
+  // monto total (número)
+  amount: number;
+  // ISO string (ej: "2025-10-06T15:23:00Z")
+  date: string;
+  // "Pendiente" | "Pagada" | "Enviada" | "Revisión"
+  status: "Pendiente" | "Pagada" | "Enviada" | "Revisión";
+  // opcional: URL PDF si tu backend lo genera
+  pdfUrl?: string | null;
+};
+
 
 interface ClientDashboardProps {
   onLogout: () => void;
@@ -36,41 +58,146 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = useState('home');
-  const [serviceRequest, setServiceRequest] = useState<'idle' | 'searching' | 'found' | 'in-progress'>('idle');
+  const [activeTab, setActiveTab] = useState("home");
+  const [serviceRequest, setServiceRequest] = useState<"idle" | "searching" | "found" | "in-progress">("idle");
   const [searchProgress, setSearchProgress] = useState(0);
 
   // 🧭 campos controlados del formulario
   const [serviceId, setServiceId] = useState<number>(1);
-  const [description, setDescription] = useState('');
-  const [location, setLocation] = useState('');
-  const [urgency, setUrgency] = useState<'Alta' | 'Media' | 'Baja'>('Alta');
-  const [estimatedDuration, setEstimatedDuration] = useState('2 horas');
-  const [budget, setBudget] = useState('$150');
+  const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("");
+  const [urgency, setUrgency] = useState<"Alta" | "Media" | "Baja">("Alta");
+  const [estimatedDuration, setEstimatedDuration] = useState("2 horas");
+  const [budget, setBudget] = useState("$150");
   const [loading, setLoading] = useState(false);
+
+  // 📄 Documentos del cliente
+  const [docs, setDocs] = useState<ClientDocumentDto[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+
+  // 🔌 SignalR
+  const socketRef = useRef<ReturnType<typeof createSocket> | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [acceptedBy, setAcceptedBy] = useState<string | null>(null);
 
   // redirección si no hay sesión
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) navigate('/login');
+    const token = localStorage.getItem("token");
+    if (!token) navigate("/login");
   }, [navigate]);
+
+  // Cargar documentos del cliente
+  useEffect(() => {
+    if (!user?.userId) return;
+
+    const loadDocs = async () => {
+      try {
+        setLoadingDocs(true);
+        const data = await listDocumentsForClient(user.userId);
+        setDocs(
+          Array.isArray(data)
+            ? data.map((doc: any) => ({
+                ...doc,
+                contractorName: doc.contractorName ?? "Contratista",
+              }))
+            : []
+        );
+      } catch (e) {
+        console.error("Error al cargar documentos del cliente:", e);
+      } finally {
+        setLoadingDocs(false);
+      }
+    };
+
+    loadDocs();
+  }, [user?.userId]);
+
+  // Conectar socket cuando haya sesión y unirse al room del usuario (estable, sin duplicar conexiones)
+  useEffect(() => {
+    if (!user?.userId) return;
+
+    if (!socketRef.current) {
+      const conn = createSocket();
+      socketRef.current = conn;
+
+      // ✅ Evento del backend cuando un contratista acepta
+      conn.on("service-request:accepted", async (msg: { requestId: number; contractorName: string }) => {
+        console.log("[SignalR] accepted:", msg);
+        setAcceptedBy(msg.contractorName);
+        setNotice(null);
+        setServiceRequest("in-progress");
+
+        // SweetAlert al cliente
+        await Swal.fire({
+          icon: "success",
+          title: "¡Tu solicitud fue aceptada!",
+          html: `
+            <div style="text-align:left">
+              <p>El contratista <b>${msg.contractorName}</b> aceptó tu solicitud.</p>
+              <p>Pronto se pondrá en contacto contigo para coordinar detalles.</p>
+            </div>
+          `,
+          confirmButtonText: "Entendido",
+        });
+      });
+
+      // 🔁 Rejoin cuando se reconecta
+      conn.onreconnected(async () => {
+        try {
+          await conn.invoke("JoinUserRoom", user.userId);
+          console.log("[SignalR] rejoined room user:", user.userId);
+        } catch (e) {
+          console.warn("[SignalR] failed to rejoin room:", e);
+        }
+      });
+    }
+
+    const conn = socketRef.current!;
+    (async () => {
+      if (conn.state === "Disconnected") {
+        try {
+          await conn.start();
+          await conn.invoke("JoinUserRoom", user.userId);
+          console.log("[SignalR] joined room user:", user.userId);
+        } catch (e) {
+          console.error("[SignalR] start/join error:", e);
+        }
+      }
+    })();
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.stop().catch(() => {});
+      }
+    };
+  }, [user?.userId]);
+
+  function dismissNotice() {
+    setNotice(null);
+  }
 
   const handleRequestService = async () => {
     if (!user?.userId) {
-      navigate('/login');
+      navigate("/login");
       return;
     }
     if (!description.trim() || !location.trim()) {
-      alert('Por favor completa la descripción y la ubicación.');
+      await Swal.fire({
+        icon: "info",
+        title: "Campos incompletos",
+        text: "Por favor completa la descripción y la ubicación.",
+      });
       return;
     }
 
     setLoading(true);
+    let interval: number | undefined;
+
     try {
       const payload: CreateServiceRequestDto = {
         clientId: user.userId,
         serviceId,
-        contractorId: null, // aún no asignado
+        contractorId: null,
         description: description.trim(),
         location: location.trim(),
         urgency,
@@ -83,93 +210,72 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
 
       await createServiceRequest(payload);
 
-      // feedback visual como tenías antes
-      setServiceRequest('searching');
+      setServiceRequest("searching");
       setSearchProgress(0);
-      const interval = setInterval(() => {
+
+      interval = window.setInterval(() => {
         setSearchProgress((prev) => {
           if (prev >= 100) {
-            clearInterval(interval);
-            setServiceRequest('found');
+            if (interval) window.clearInterval(interval);
+            setServiceRequest("found");
             return 100;
           }
           return prev + 12;
         });
       }, 250);
-    } catch (err) {
-      console.error('Error creando la solicitud', err);
-      alert('No pudimos crear la solicitud. Intenta de nuevo.');
+    } catch (err: any) {
+      console.error("Error creando la solicitud", err);
+      await Swal.fire({
+        icon: "error",
+        title: "No pudimos crear la solicitud",
+        text: err?.response?.data?.message ?? "Intenta de nuevo.",
+      });
     } finally {
       setLoading(false);
+      if (interval) window.clearInterval(interval);
     }
   };
 
   const handleAcceptContractor = () => {
-    setServiceRequest('in-progress');
+    setServiceRequest("in-progress");
   };
 
   const mockContractors = [
     {
       id: 1,
-      name: 'Carlos Rodríguez',
-      specialties: ['Fontanería', 'Electricidad'],
+      name: "Carlos Rodríguez",
+      specialties: ["Fontanería", "Electricidad"],
       rating: 4.8,
       completedJobs: 245,
-      distance: '2.3 km',
-      hourlyRate: '$25-35',
+      distance: "2.3 km",
+      hourlyRate: "$25-35",
       available: true,
-      avatar: '/api/placeholder/40/40',
+      avatar: "/api/placeholder/40/40",
     },
     {
       id: 2,
-      name: 'María González',
-      specialties: ['Pintura', 'Reparaciones'],
+      name: "María González",
+      specialties: ["Pintura", "Reparaciones"],
       rating: 4.9,
       completedJobs: 189,
-      distance: '1.8 km',
-      hourlyRate: '$20-30',
+      distance: "1.8 km",
+      hourlyRate: "$20-30",
       available: true,
-      avatar: '/api/placeholder/40/40',
+      avatar: "/api/placeholder/40/40",
     },
     {
       id: 3,
-      name: 'Luis Méndez',
-      specialties: ['Construcción', 'Albañilería'],
+      name: "Luis Méndez",
+      specialties: ["Construcción", "Albañilería"],
       rating: 4.7,
       completedJobs: 312,
-      distance: '3.1 km',
-      hourlyRate: '$30-45',
+      distance: "3.1 km",
+      hourlyRate: "$30-45",
       available: false,
-      avatar: '/api/placeholder/40/40',
+      avatar: "/api/placeholder/40/40",
     },
   ];
 
-  const mockDocuments = [
-    {
-      id: 1,
-      type: 'Cotización',
-      contractor: 'Carlos Rodríguez',
-      amount: '$450',
-      date: '2024-01-15',
-      status: 'Pendiente',
-    },
-    {
-      id: 2,
-      type: 'Factura',
-      contractor: 'María González',
-      amount: '$280',
-      date: '2024-01-10',
-      status: 'Pagada',
-    },
-    {
-      id: 3,
-      type: 'Proforma',
-      contractor: 'Luis Méndez',
-      amount: '$650',
-      date: '2024-01-08',
-      status: 'Revisión',
-    },
-  ];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -193,6 +299,24 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
       </header>
 
       <div className="max-w-6xl mx-auto p-6">
+        {/* 🔔 Banner de notificación por aceptación */}
+        {notice && (
+          <div className="mb-4 flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-3 text-green-800">
+            <CheckCircle className="h-5 w-5 shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium">{notice}</p>
+              {acceptedBy && <p className="text-sm opacity-80">Contratista: {acceptedBy}</p>}
+            </div>
+            <button
+              onClick={dismissNotice}
+              className="rounded-md px-2 py-1 text-sm hover:bg-green-100"
+              aria-label="Cerrar notificación"
+            >
+              Cerrar
+            </button>
+          </div>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid grid-cols-4 w-fit mb-6">
             <TabsTrigger value="home" className="flex items-center gap-2">
@@ -222,12 +346,10 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                     <Search className="w-5 h-5 text-blue-600" />
                     Solicitar Servicio
                   </CardTitle>
-                  <CardDescription>
-                    Describe tu proyecto y encuentra el contratista perfecto
-                  </CardDescription>
+                  <CardDescription>Describe tu proyecto y encuentra el contratista perfecto</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {serviceRequest === 'idle' && (
+                  {serviceRequest === "idle" && (
                     <>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Tipo de Servicio</label>
@@ -260,7 +382,7 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                           <select
                             className="w-full p-3 border rounded-lg"
                             value={urgency}
-                            onChange={(e) => setUrgency(e.target.value as 'Alta' | 'Media' | 'Baja')}
+                            onChange={(e) => setUrgency(e.target.value as "Alta" | "Media" | "Baja")}
                           >
                             <option value="Alta">Alta</option>
                             <option value="Media">Media</option>
@@ -280,11 +402,7 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-2">
                           <label className="text-sm font-medium">Presupuesto</label>
-                          <Input
-                            placeholder="Ej: $150"
-                            value={budget}
-                            onChange={(e) => setBudget(e.target.value)}
-                          />
+                          <Input placeholder="Ej: $150" value={budget} onChange={(e) => setBudget(e.target.value)} />
                         </div>
                         <div className="space-y-2">
                           <label className="text-sm font-medium">Ubicación</label>
@@ -302,31 +420,25 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                         </div>
                       </div>
 
-                      <Button
-                        onClick={handleRequestService}
-                        disabled={loading}
-                        className="w-full bg-blue-600 hover:bg-blue-700"
-                      >
-                        {loading ? 'Enviando...' : (<><Search className="w-4 h-4 mr-2" /> Buscar Contratista</>)}
+                      <Button onClick={handleRequestService} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700">
+                        {loading ? "Enviando..." : (<><Search className="w-4 h-4 mr-2" /> Buscar Contratista</>)}
                       </Button>
                     </>
                   )}
 
-                  {serviceRequest === 'searching' && (
+                  {serviceRequest === "searching" && (
                     <div className="text-center py-8">
                       <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Search className="w-8 h-8 text-blue-600 animate-pulse" />
                       </div>
                       <h3 className="text-lg font-semibold mb-2">Buscando contratistas...</h3>
-                      <p className="text-muted-foreground mb-4">
-                        Estamos encontrando los mejores profesionales para ti
-                      </p>
+                      <p className="text-muted-foreground mb-4">Estamos encontrando los mejores profesionales para ti</p>
                       <Progress value={searchProgress} className="w-full" />
                       <p className="text-sm text-muted-foreground mt-2">{searchProgress}% completado</p>
                     </div>
                   )}
 
-                  {serviceRequest === 'found' && (
+                  {serviceRequest === "found" && (
                     <div className="text-center py-4">
                       <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <CheckCircle className="w-8 h-8 text-green-600" />
@@ -349,7 +461,7 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button variant="outline" className="flex-1" onClick={() => setServiceRequest('idle')}>
+                        <Button variant="outline" className="flex-1" onClick={() => setServiceRequest("idle")}>
                           Buscar Otro
                         </Button>
                         <Button onClick={handleAcceptContractor} className="flex-1 bg-blue-600 hover:bg-blue-700">
@@ -359,14 +471,14 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                     </div>
                   )}
 
-                  {serviceRequest === 'in-progress' && (
+                  {serviceRequest === "in-progress" && (
                     <div className="text-center py-4">
                       <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Navigation className="w-8 h-8 text-blue-600" />
                       </div>
                       <h3 className="text-lg font-semibold mb-2">Contratista en camino</h3>
                       <p className="text-muted-foreground mb-4">
-                        Carlos llegará en aproximadamente 15 minutos
+                        {acceptedBy ? `${acceptedBy} llegará en aproximadamente 15 minutos` : "Llega en ~15 minutos"}
                       </p>
                       <div className="bg-gray-50 rounded-lg p-4 mb-4">
                         <div className="flex items-center justify-between">
@@ -424,15 +536,11 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                         <div key={contractor.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                           <Avatar className="w-8 h-8">
                             <AvatarImage src={contractor.avatar} />
-                            <AvatarFallback>
-                              {contractor.name.split(' ').map((n) => n[0]).join('')}
-                            </AvatarFallback>
+                            <AvatarFallback>{contractor.name.split(" ").map((n) => n[0]).join("")}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
                             <div className="font-medium text-sm">{contractor.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {contractor.specialties.join(', ')}
-                            </div>
+                            <div className="text-xs text-muted-foreground">{contractor.specialties.join(", ")}</div>
                           </div>
                           <div className="flex items-center gap-1">
                             <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
@@ -469,14 +577,12 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
 
                   <div className="grid gap-4">
                     {mockContractors.map((contractor) => (
-                      <Card key={contractor.id} className={contractor.available ? '' : 'opacity-60'}>
+                      <Card key={contractor.id} className={contractor.available ? "" : "opacity-60"}>
                         <CardContent className="p-4">
                           <div className="flex items-start gap-4">
                             <Avatar className="w-12 h-12">
                               <AvatarImage src={contractor.avatar} />
-                              <AvatarFallback>
-                                {contractor.name.split(' ').map((n) => n[0]).join('')}
-                              </AvatarFallback>
+                              <AvatarFallback>{contractor.name.split(" ").map((n) => n[0]).join("")}</AvatarFallback>
                             </Avatar>
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
@@ -534,7 +640,7 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
             </Card>
           </TabsContent>
 
-          {/* Documents Tab */}
+                    {/* Documents Tab (REAL) */}
           <TabsContent value="documents">
             <Card>
               <CardHeader>
@@ -542,59 +648,131 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                 <CardDescription>Gestiona todos los documentos enviados por los contratistas</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {mockDocuments.map((doc) => (
-                    <Card key={doc.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                              <FileText className="w-6 h-6 text-blue-600" />
+                {loadingDocs ? (
+                  <div className="text-sm text-muted-foreground">Cargando documentos...</div>
+                ) : docs.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    Aún no tienes documentos. Cuando el contratista envíe uno, aparecerá aquí.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {docs.map((doc) => (
+                      <Card key={doc.id}>
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <FileText className="w-6 h-6 text-blue-600" />
+                              </div>
+                              <div>
+                                <h3 className="font-semibold">
+                                  {doc.kind === "cotizacion"
+                                    ? "Cotización"
+                                    : doc.kind === "factura"
+                                    ? "Factura"
+                                    : "Proforma"}
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                  De: {doc.contractorName ?? "Contratista"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(doc.date).toLocaleString()}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <h3 className="font-semibold">{doc.type}</h3>
-                              <p className="text-sm text-muted-foreground">De: {doc.contractor}</p>
-                              <p className="text-xs text-muted-foreground">{doc.date}</p>
+
+                            <div className="text-right">
+                              <div className="text-lg font-semibold">
+                                {typeof doc.amount === "number" ? `$${doc.amount.toFixed(2)}` : (doc.amount ?? "-")}
+                              </div>
+                              <Badge
+                                variant={
+                                  doc.status === "Pagada"
+                                    ? "default"
+                                    : doc.status === "Pendiente"
+                                    ? "secondary"
+                                    : "outline"
+                                }
+                                className={
+                                  doc.status === "Pagada"
+                                    ? "bg-green-100 text-green-700"
+                                    : doc.status === "Pendiente"
+                                    ? "bg-yellow-100 text-yellow-700"
+                                    : "bg-gray-100 text-gray-700"
+                                }
+                              >
+                                {doc.status}
+                              </Badge>
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-lg font-semibold">{doc.amount}</div>
-                            <Badge
-                              variant={
-                                doc.status === 'Pagada' ? 'default' : doc.status === 'Pendiente' ? 'secondary' : 'outline'
-                              }
-                              className={
-                                doc.status === 'Pagada'
-                                  ? 'bg-green-100 text-green-700'
-                                  : doc.status === 'Pendiente'
-                                  ? 'bg-yellow-100 text-yellow-700'
-                                  : 'bg-gray-100 text-gray-700'
-                              }
-                            >
-                              {doc.status}
-                            </Badge>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm">
-                              Ver
-                            </Button>
-                            <Button variant="outline" size="sm">
-                              Descargar
-                            </Button>
-                            {doc.status === 'Pendiente' && (
-                              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                                Pagar
+
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  if (!doc.pdfUrl) {
+                                    Swal.fire({ icon: "info", text: "Este documento no tiene archivo adjunto." });
+                                    return;
+                                  }
+                                  window.open(doc.pdfUrl, "_blank", "noopener,noreferrer");
+                                }}
+                              >
+                                Ver
                               </Button>
-                            )}
+
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  if (!doc.pdfUrl) {
+                                    Swal.fire({ icon: "info", text: "Este documento no tiene archivo adjunto." });
+                                    return;
+                                  }
+                                  window.open(doc.pdfUrl, "_blank", "noopener,noreferrer");
+                                }}
+                              >
+                                Descargar
+                              </Button>
+
+                              {doc.status === "Pendiente" && (
+                                <Button
+                                  size="sm"
+                                  className="bg-blue-600 hover:bg-blue-700"
+                                  onClick={async () => {
+                                    await Swal.fire({
+                                      icon: "info",
+                                      title: "Pagar documento",
+                                      html: `
+                                        <div style="text-align:left">
+                                          <p>Estás por pagar la <b>${
+                                            doc.kind === "factura" ? "factura" : doc.kind
+                                          }</b> de <b>${doc.contractorName ?? "Contratista"}</b>.</p>
+                                          <p>Monto: <b>${
+                                            typeof doc.amount === "number"
+                                              ? doc.amount.toFixed(2)
+                                              : (doc.amount ?? "-")
+                                          }</b></p>
+                                          <p class="mt-2">Integra aquí tu flujo de pago.</p>
+                                        </div>
+                                      `,
+                                      confirmButtonText: "Entendido",
+                                    });
+                                  }}
+                                >
+                                  Pagar
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
+
 
           {/* History Tab */}
           <TabsContent value="history">

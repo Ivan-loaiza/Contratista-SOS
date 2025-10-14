@@ -1,32 +1,21 @@
 // src/components/ContractorDashboard.tsx
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Badge } from './ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Textarea } from './ui/textarea';
+import { useEffect, useMemo, useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Badge } from "./ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Textarea } from "./ui/textarea";
 import {
-  Bell,
-  Star,
-  Clock,
-  DollarSign,
-  FileText,
-  Send,
-  Plus,
-  LogOut,
-  Wrench,
-  MapPin,
-  User,
-  CheckCircle,
-  XCircle,
-  Calculator,
-  Receipt,
-  FileCheck,
-} from 'lucide-react';
-import { getServiceRequests } from '@/services/ServiceRequestApi';
+  Bell, Star, Clock, DollarSign, FileText, Send, Plus, LogOut, Wrench, MapPin, User,
+  CheckCircle, XCircle, Calculator, Receipt, FileCheck,
+} from "lucide-react";
+import { acceptServiceRequest, getServiceRequests } from "@/services/ServiceRequestApi";
+import { listMyDocuments, createDocument } from "@/services/DocumentApi";
+import { useAuth } from "@/context/AuthContext";
+import Swal from "sweetalert2";
 
 interface ContractorDashboardProps {
   onLogout: () => void;
@@ -44,55 +33,247 @@ interface ServiceRequest {
   requestTime: string;
 }
 
-export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
-  const [activeTab, setActiveTab] = useState('requests');
-  const [requests, setRequests] = useState<ServiceRequest[]>([]);
-  const [documentType, setDocumentType] =
-    useState<'cotizacion' | 'factura' | 'proforma'>('cotizacion');
-  const [serviceItems, setServiceItems] = useState([{ description: '', hours: '', rate: '' }]);
+type DocKind = "cotizacion" | "factura" | "proforma";
 
-  // 🔄 Carga inicial + polling cada 8s
+interface OutDoc {
+  id: number;
+  kind: DocKind;
+  clientName: string;
+  amount: number;
+  date: string;       // ISO
+  status: "Pendiente" | "Pagada" | "Enviada" | "Revisión";
+  pdfUrl?: string | null;
+  requestId: number;
+}
+
+export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
+  const [activeTab, setActiveTab] = useState("requests");
+  const [requests, setRequests] = useState<ServiceRequest[]>([]);
+  const [documentType, setDocumentType] = useState<DocKind>("cotizacion");
+  const [serviceItems, setServiceItems] = useState([{ description: "", hours: "", rate: "" }]);
+  const [notes, setNotes] = useState("");
+
+  // ids en proceso de aceptar
+  const [accepting, setAccepting] = useState<Record<number, boolean>>({});
+  // doc context: a qué solicitud/cliente le voy a enviar el doc
+  const [currentReqForDoc, setCurrentReqForDoc] = useState<ServiceRequest | null>(null);
+
+  const [sentDocs, setSentDocs] = useState<OutDoc[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+
+  const { user } = useAuth();
+
+  // =========================
+  // Solicitudes + documentos
+  // =========================
   useEffect(() => {
     let stopped = false;
 
     const fetchRequests = async () => {
       try {
         const data = await getServiceRequests();
-        if (!stopped) {
-          setRequests(Array.isArray(data) ? data : []);
-        }
+        if (!stopped) setRequests(Array.isArray(data) ? data : []);
       } catch (error) {
-        console.error('Error al obtener solicitudes:', error);
+        console.error("Error al obtener solicitudes:", error);
+      }
+    };
+
+    const fetchDocs = async () => {
+      try {
+        setLoadingDocs(true);
+        const data = await listMyDocuments();
+        if (!stopped) setSentDocs(Array.isArray(data) ? data : []);
+      } catch (e) {
+        console.error("Error al obtener documentos:", e);
+      } finally {
+        setLoadingDocs(false);
       }
     };
 
     fetchRequests();
-    const id = setInterval(fetchRequests, 8000);
+    fetchDocs();
+
+    const id = window.setInterval(() => {
+      fetchRequests();
+      fetchDocs();
+    }, 8000);
+
     return () => {
       stopped = true;
-      clearInterval(id);
+      window.clearInterval(id);
     };
   }, []);
 
+  async function refreshRequests() {
+    try {
+      const data = await getServiceRequests();
+      setRequests(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Error refrescando solicitudes:", e);
+    }
+  }
+
+  async function refreshDocs() {
+    try {
+      setLoadingDocs(true);
+      const data = await listMyDocuments();
+      setSentDocs(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Error refrescando documentos:", e);
+    } finally {
+      setLoadingDocs(false);
+    }
+  }
+
+  // =========================
+  // Helpers Documentos
+  // =========================
+  const total = useMemo(() => {
+    return serviceItems.reduce((acc, it) => {
+      const h = parseFloat(it.hours || "0") || 0;
+      const r = parseFloat(it.rate || "0") || 0;
+      return acc + h * r;
+    }, 0);
+  }, [serviceItems]);
+
   const addServiceItem = () =>
-    setServiceItems((prev) => [...prev, { description: '', hours: '', rate: '' }]);
+    setServiceItems((prev) => [...prev, { description: "", hours: "", rate: "" }]);
 
   const removeServiceItem = (index: number) =>
     setServiceItems((prev) => prev.filter((_, i) => i !== index));
 
-  const updateServiceItem = (index: number, field: string, value: string) =>
-    setServiceItems((prev) =>
-      prev.map((it, i) => (i === index ? { ...it, [field]: value } : it))
-    );
+  const updateServiceItem = (index: number, field: "description" | "hours" | "rate", value: string) =>
+    setServiceItems((prev) => prev.map((it, i) => (i === index ? { ...it, [field]: value } : it)));
 
-  const calculateTotal = () =>
-    serviceItems.reduce((total, item) => {
-      const hours = parseFloat(item.hours) || 0;
-      const rate = parseFloat(item.rate) || 0;
-      return total + hours * rate;
-    }, 0);
+  // =========================
+  // Aceptar solicitud
+  // =========================
+  async function handleAccept(req: ServiceRequest) {
+    if (!user?.userId) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Sesión requerida",
+        text: "Debes iniciar sesión como contratista.",
+      });
+      return;
+    }
 
-  return (
+    const contractorName =
+      (user as any)?.fullName ??
+      (user as any)?.name ??
+      (user as any)?.displayName ??
+      (user as any)?.email ??
+      "Contratista";
+
+    try {
+      setAccepting((s) => ({ ...s, [req.requestId]: true }));
+
+      await acceptServiceRequest(req.requestId, {
+        contractorId: user.userId,
+        contractorName,
+      });
+
+      // Prefill del formulario de documento
+      setCurrentReqForDoc(req);
+      setDocumentType("cotizacion");
+      setActiveTab("documents");
+      setNotes(`Trabajo: ${req.serviceName}. Ubicación: ${req.location}.`);
+      // Atajo: si el cliente dio presupuesto, colócalo como referencia
+      if (req.budget && !isNaN(parseFloat(req.budget.replace(/[^0-9.]/g, "")))) {
+        // deja los items tal cual; el total se calcula con horas*tarifa
+      }
+
+      await Swal.fire({
+        icon: "success",
+        title: "Solicitud aceptada",
+        html: `
+          <div style="text-align:left">
+            <p><b>Cliente:</b> ${req.clientName}</p>
+            <p><b>Servicio:</b> ${req.serviceName}</p>
+            <p>Ahora puedes crear y enviar una <b>cotización</b>.</p>
+          </div>
+        `,
+        confirmButtonText: "Crear cotización",
+      });
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const data = err?.response?.data;
+      console.error("Aceptar falló:", { status, data, raw: err });
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo aceptar la solicitud",
+        text: data?.message ?? "Intenta de nuevo.",
+      });
+    } finally {
+      setAccepting((s) => ({ ...s, [req.requestId]: false }));
+      refreshRequests().catch(() => {});
+    }
+  }
+
+  // =========================
+  // Enviar documento
+  // =========================
+  async function handleSendDocument() {
+    if (!currentReqForDoc) {
+      await Swal.fire({
+        icon: "info",
+        title: "Selecciona una solicitud",
+        text: "Acepta una solicitud primero para asociar el documento.",
+      });
+      return;
+    }
+
+    const items = serviceItems
+      .map((it) => ({
+        description: it.description.trim(),
+        hours: parseFloat(it.hours || "0") || 0,
+        rate: parseFloat(it.rate || "0") || 0,
+      }))
+      .filter((x) => x.description && x.hours > 0 && x.rate > 0);
+
+    if (items.length === 0) {
+      await Swal.fire({
+        icon: "info",
+        title: "Agrega al menos un ítem",
+        text: "Cada ítem debe tener descripción, horas y tarifa válidas.",
+      });
+      return;
+    }
+
+    try {
+      await createDocument({
+  kind: documentType,
+  requestId: currentReqForDoc.requestId,
+  items,
+  notes: notes.trim() || undefined,
+  total,
+}, user!.userId // ✅ Forzar a TypeScript a saber que no es null
+); // <-- ¡pasas el contractorId!
+
+
+      await Swal.fire({
+        icon: "success",
+        title: `${documentType[0].toUpperCase() + documentType.slice(1)} enviada`,
+        text: `El cliente ${currentReqForDoc.clientName} recibirá el documento.`,
+      });
+
+      // limpiar y refrescar
+      setServiceItems([{ description: "", hours: "", rate: "" }]);
+      setNotes("");
+      await refreshDocs();
+    } catch (err: any) {
+      console.error("createDocument error:", err?.response?.data ?? err);
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo enviar el documento",
+        text: err?.response?.data?.message ?? "Inténtalo nuevamente.",
+      });
+    }
+  }
+
+
+
+    return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b px-6 py-4">
@@ -169,25 +350,27 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
                                 <AvatarImage src="/api/placeholder/40/40" />
                                 <AvatarFallback>
                                   {request.clientName
-                                    ?.split(' ')
+                                    ?.split(" ")
                                     .map((n) => n[0])
-                                    .join('')
+                                    .join("")
                                     .slice(0, 2)
                                     .toUpperCase()}
                                 </AvatarFallback>
                               </Avatar>
                               <div>
                                 <h3 className="font-semibold">{request.clientName}</h3>
-                                <p className="text-sm text-muted-foreground">{request.requestTime}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {request.requestTime}
+                                </p>
                               </div>
                             </div>
                             <Badge
                               variant={
-                                request.urgency === 'Alta'
-                                  ? 'destructive'
-                                  : request.urgency === 'Media'
-                                  ? 'secondary'
-                                  : 'default'
+                                request.urgency === "Alta"
+                                  ? "destructive"
+                                  : request.urgency === "Media"
+                                  ? "secondary"
+                                  : "default"
                               }
                             >
                               Urgencia {request.urgency}
@@ -241,9 +424,13 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
                               <XCircle className="w-4 h-4 mr-2" />
                               Declinar
                             </Button>
-                            <Button className="flex-1 bg-green-600 hover:bg-green-700">
-                              <CheckCircle className="w-4 h-4 mr-2" />
-                              Aceptar Solicitud
+
+                            <Button
+                              onClick={() => handleAccept(request)}
+                              className="w-full"
+                              disabled={!!accepting[request.requestId]}
+                            >
+                              {accepting[request.requestId] ? "Aceptando..." : "Aceptar Solicitud"}
                             </Button>
                           </div>
                         </CardContent>
@@ -258,6 +445,7 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
           {/* Documents Tab */}
           <TabsContent value="documents">
             <div className="grid lg:grid-cols-2 gap-6">
+              {/* Crear documento */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -265,36 +453,39 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
                     Crear Documento
                   </CardTitle>
                   <CardDescription>
-                    Genera cotizaciones, facturas y proformas para tus clientes
+                    {currentReqForDoc
+                      ? <>Para: <b>{currentReqForDoc.clientName}</b> • Solicitud #{currentReqForDoc.requestId}</>
+                      : "Acepta una solicitud para asociar el documento al cliente"}
                   </CardDescription>
                 </CardHeader>
+
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label>Tipo de Documento</Label>
                     <div className="grid grid-cols-3 gap-2">
                       <Button
-                        variant={documentType === 'cotizacion' ? 'default' : 'outline'}
+                        variant={documentType === "cotizacion" ? "default" : "outline"}
                         size="sm"
-                        onClick={() => setDocumentType('cotizacion')}
-                        className={documentType === 'cotizacion' ? 'bg-green-600 hover:bg-green-700' : ''}
+                        onClick={() => setDocumentType("cotizacion")}
+                        className={documentType === "cotizacion" ? "bg-green-600 hover:bg-green-700" : ""}
                       >
                         <Calculator className="w-4 h-4 mr-1" />
                         Cotización
                       </Button>
                       <Button
-                        variant={documentType === 'factura' ? 'default' : 'outline'}
+                        variant={documentType === "factura" ? "default" : "outline"}
                         size="sm"
-                        onClick={() => setDocumentType('factura')}
-                        className={documentType === 'factura' ? 'bg-green-600 hover:bg-green-700' : ''}
+                        onClick={() => setDocumentType("factura")}
+                        className={documentType === "factura" ? "bg-green-600 hover:bg-green-700" : ""}
                       >
                         <Receipt className="w-4 h-4 mr-1" />
                         Factura
                       </Button>
                       <Button
-                        variant={documentType === 'proforma' ? 'default' : 'outline'}
+                        variant={documentType === "proforma" ? "default" : "outline"}
                         size="sm"
-                        onClick={() => setDocumentType('proforma')}
-                        className={documentType === 'proforma' ? 'bg-green-600 hover:bg-green-700' : ''}
+                        onClick={() => setDocumentType("proforma")}
+                        className={documentType === "proforma" ? "bg-green-600 hover:bg-green-700" : ""}
                       >
                         <FileCheck className="w-4 h-4 mr-1" />
                         Proforma
@@ -326,29 +517,31 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
                             </Button>
                           )}
                         </div>
+
                         <div className="space-y-2">
                           <Input
                             placeholder="Descripción del servicio"
                             value={item.description}
-                            onChange={(e) => updateServiceItem(index, 'description', e.target.value)}
+                            onChange={(e) => updateServiceItem(index, "description", e.target.value)}
                           />
                           <div className="grid grid-cols-2 gap-2">
                             <Input
                               placeholder="Horas"
                               type="number"
                               value={item.hours}
-                              onChange={(e) => updateServiceItem(index, 'hours', e.target.value)}
+                              onChange={(e) => updateServiceItem(index, "hours", e.target.value)}
                             />
                             <Input
                               placeholder="Tarifa/hora ($)"
                               type="number"
                               value={item.rate}
-                              onChange={(e) => updateServiceItem(index, 'rate', e.target.value)}
+                              onChange={(e) => updateServiceItem(index, "rate", e.target.value)}
                             />
                           </div>
+
                           {item.hours && item.rate && (
                             <div className="text-right text-sm font-medium">
-                              Subtotal: ${(parseFloat(item.hours) * parseFloat(item.rate)).toFixed(2)}
+                              Subtotal: {(parseFloat(item.hours) * parseFloat(item.rate)).toFixed(2)}
                             </div>
                           )}
                         </div>
@@ -358,23 +551,34 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
                     <div className="bg-green-50 rounded-lg p-4">
                       <div className="flex justify-between items-center">
                         <span className="font-semibold">Total:</span>
-                        <span className="text-xl font-bold text-green-600">${calculateTotal().toFixed(2)}</span>
+                        <span className="text-xl font-bold text-green-600">${total.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="notes">Notas Adicionales</Label>
-                    <Textarea id="notes" placeholder="Términos y condiciones, garantías, etc." className="h-16" />
+                    <Textarea
+                      id="notes"
+                      placeholder="Términos y condiciones, garantías, etc."
+                      className="h-16"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                    />
                   </div>
 
-                  <Button className="w-full bg-green-600 hover:bg-green-700">
+                  <Button
+                    className="w-full bg-green-600 hover:bg-green-700"
+                    onClick={handleSendDocument}
+                    disabled={!currentReqForDoc || total <= 0}
+                  >
                     <Send className="w-4 h-4 mr-2" />
                     Enviar {documentType.charAt(0).toUpperCase() + documentType.slice(1)}
                   </Button>
                 </CardContent>
               </Card>
 
+              {/* Historial documentos enviados */}
               <Card>
                 <CardHeader>
                   <CardTitle>Documentos Enviados</CardTitle>
@@ -382,32 +586,53 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {[
-                      { type: 'Cotización', client: 'Ana Martínez', amount: '$450', date: '2024-01-15', status: 'Pendiente' },
-                      { type: 'Factura', client: 'Pedro López', amount: '$320', date: '2024-01-14', status: 'Pagada' },
-                      { type: 'Proforma', client: 'María García', amount: '$680', date: '2024-01-13', status: 'Enviada' },
-                    ].map((doc, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                            <FileText className="w-4 h-4 text-green-600" />
+                    {loadingDocs && (
+                      <div className="text-sm text-muted-foreground">Cargando documentos…</div>
+                    )}
+
+                    {!loadingDocs && sentDocs.length === 0 && (
+                      <div className="text-sm text-muted-foreground">Aún no has enviado documentos.</div>
+                    )}
+
+                    {!loadingDocs &&
+                      sentDocs.map((doc) => (
+                        <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                              <FileText className="w-4 h-4 text-green-600" />
+                            </div>
+                            <div>
+                              <div className="font-medium">
+                                {doc.kind === "cotizacion"
+                                  ? "Cotización"
+                                  : doc.kind === "factura"
+                                  ? "Factura"
+                                  : "Proforma"}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                Cliente: {doc.clientName} • {new Date(doc.date).toLocaleDateString()}
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="font-medium">{doc.type}</div>
-                            <div className="text-sm text-muted-foreground">{doc.client}</div>
+                          <div className="text-right">
+                            <div className="font-semibold">
+                              ${doc.amount.toFixed(2)}
+                            </div>
+                            <Badge
+                              variant={doc.status === "Pagada" ? "default" : doc.status === "Pendiente" ? "secondary" : "outline"}
+                              className={
+                                doc.status === "Pagada"
+                                  ? "bg-green-100 text-green-700"
+                                  : doc.status === "Pendiente"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-gray-100 text-gray-700"
+                              }
+                            >
+                              {doc.status}
+                            </Badge>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="font-semibold">{doc.amount}</div>
-                          <Badge
-                            variant={doc.status === 'Pagada' ? 'default' : 'secondary'}
-                            className={doc.status === 'Pagada' ? 'bg-green-100 text-green-700' : ''}
-                          >
-                            {doc.status}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </CardContent>
               </Card>

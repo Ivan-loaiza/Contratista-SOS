@@ -7,6 +7,7 @@ import { jwtDecode } from "jwt-decode";
 type Role = 'client' | 'contractor';
 
 export interface UserSession {
+  name: string;
   userId: number;
   fullName: string;
   email: string;
@@ -67,6 +68,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email: extra?.email ?? decoded.email ?? '',
       roles: rolesArray,
       role,
+      name: ""
     };
 
     setToken(jwt);

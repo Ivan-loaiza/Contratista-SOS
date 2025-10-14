@@ -1,35 +1,35 @@
 // src/services/ServiceRequestApi.ts
-import axios from 'axios';
+import axios from "axios";
 
-const API = axios.create({
-  baseURL: 'https://localhost:7095/api',
-  headers: { 'Content-Type': 'application/json' },
+export const API = axios.create({
+  baseURL: "https://localhost:7095/api",
+  headers: { "Content-Type": "application/json" },
 });
 
-// Interceptor: agrega token si existe
 API.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
 /* ===== Tipos ===== */
 export interface CreateServiceRequestDto {
-  clientId: number;             // userId del cliente (User con rol client)
-  serviceId: number;            // id del servicio (Fontanería, etc.)
-  contractorId?: number | null; // normalmente null al crear
+  clientId: number;
+  serviceId: number;
+  contractorId?: number | null;
   description: string;
   location: string;
-  urgency: string;              // 'Alta' | 'Media' | 'Baja'
-  estimatedDuration: string;    // "2 horas"
-  budget: string;               // "$150"
-  requestDate: string;          // ISO string
-  serviceDate?: string | null;  // ISO o null
+  urgency: string;
+  estimatedDuration: string;
+  budget: string;
+  requestDate: string;       // ISO
+  serviceDate?: string | null;
   isActive: boolean;
 }
 
 export interface ServiceRequestDto {
   requestId: number;
+  clientId?: number;
   clientName: string;
   serviceName: string;
   description: string;
@@ -40,17 +40,34 @@ export interface ServiceRequestDto {
   requestTime: string;
 }
 
+export interface AcceptServiceRequestPayload {
+  contractorId: number;
+  contractorName: string;
+}
+export interface AcceptServiceRequestResponse {
+  ok: boolean;
+  requestId: number;
+  clientId: number;
+  contractorId: number;
+  contractorName: string;
+}
+
 /* ===== Endpoints ===== */
-
-// POST /api/ServiceRequests
-export const createServiceRequest = async (dto: CreateServiceRequestDto) => {
-  const res = await API.post('/ServiceRequest', dto);
+export async function createServiceRequest(dto: CreateServiceRequestDto) {
+  const res = await API.post("/ServiceRequest", dto);
   return res.data;
-};
+}
 
-// GET /api/ServiceRequests
-export const getServiceRequests = async (): Promise<ServiceRequestDto[]> => {
-  const res = await API.get('/ServiceRequest');
+export async function getServiceRequests(): Promise<ServiceRequestDto[]> {
+  const res = await API.get("/ServiceRequest");
   return res.data;
-};
+}
 
+/** 🔹 Export nombrada que te falta */
+export async function acceptServiceRequest(
+  requestId: number,
+  payload: AcceptServiceRequestPayload
+): Promise<AcceptServiceRequestResponse> {
+  const res = await API.post(`/ServiceRequest/${requestId}/accept`, payload);
+  return res.data as AcceptServiceRequestResponse;
+}

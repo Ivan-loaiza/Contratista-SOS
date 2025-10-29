@@ -30,6 +30,7 @@ import { createServiceRequest, type CreateServiceRequestDto } from "@/services/S
 import { createSocket } from "@/lib/socket";
 import Swal from "sweetalert2";
 import { listDocumentsForClient } from "@/services/ClientDocumentService";
+import { fetchServices, type ServiceDto } from "@/api/ServiceApi";
 
 
 type ClientDocumentDto = {
@@ -61,15 +62,17 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
   const [activeTab, setActiveTab] = useState("home");
   const [serviceRequest, setServiceRequest] = useState<"idle" | "searching" | "found" | "in-progress">("idle");
   const [searchProgress, setSearchProgress] = useState(0);
+  const [services, setServices] = useState<ServiceDto[]>([]);
 
   // 🧭 campos controlados del formulario
-  const [serviceId, setServiceId] = useState<number>(1);
+  const [serviceId, setServiceId] = useState<number>(0);
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [urgency, setUrgency] = useState<"Alta" | "Media" | "Baja">("Alta");
   const [estimatedDuration, setEstimatedDuration] = useState("2 horas");
   const [budget, setBudget] = useState("$150");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // 📄 Documentos del cliente
   const [docs, setDocs] = useState<ClientDocumentDto[]>([]);
@@ -79,6 +82,17 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
   const socketRef = useRef<ReturnType<typeof createSocket> | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [acceptedBy, setAcceptedBy] = useState<string | null>(null);
+
+  // Cargar servicios
+  useEffect(() => {
+    fetchServices()
+      .then(setServices)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <p>Cargando servicios...</p>;
+  if (error) return <p>Error: {error}</p>;
 
   // redirección si no hay sesión
   useEffect(() => {
@@ -353,17 +367,19 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                     <>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Tipo de Servicio</label>
-                        <select
-                          className="w-full p-3 border rounded-lg"
-                          value={serviceId}
-                          onChange={(e) => setServiceId(Number(e.target.value))}
-                        >
-                          <option value={1}>Fontanería</option>
-                          <option value={2}>Electricidad</option>
-                          <option value={3}>Pintura</option>
-                          <option value={4}>Construcción</option>
-                          <option value={5}>Reparaciones</option>
-                        </select>
+                       <select
+                        className="w-full p-3 border rounded-lg"
+                        value={serviceId}
+                        onChange={(e) => setServiceId(Number(e.target.value))}
+                      >
+                        <option value={0} disabled>Selecciona un servicio</option>
+                        {services.map((service) => (
+                          <option key={service.serviceId} value={service.serviceId}>
+                            {service.name}
+                          </option>
+                        ))}
+                      </select>
+
                       </div>
 
                       <div className="space-y-2">
@@ -817,3 +833,4 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
     </div>
   );
 }
+

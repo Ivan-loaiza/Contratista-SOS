@@ -190,65 +190,102 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
     setNotice(null);
   }
 
-  const handleRequestService = async () => {
-    if (!user?.userId) {
-      navigate("/login");
-      return;
-    }
-    if (!description.trim() || !location.trim()) {
-      await Swal.fire({
+ const handleRequestService = async () => {
+  if (!user?.userId) {
+    navigate("/login");
+    return;
+  }
+
+  if (
+    serviceId === 0 ||
+    !description.trim() ||
+    !location.trim() ||
+    !estimatedDuration.trim() ||
+    !budget.trim()
+  ) {
+    await Swal.fire({
+      icon: "info",
+      title: "Campos incompletos",
+      text: "Por favor completa todos los campos requeridos antes de continuar.",
+    });
+    return;
+  }
+
+  setLoading(true);
+  let interval: number | undefined;
+
+  try {
+    const payload: CreateServiceRequestDto = {
+      clientId: user.userId,
+      serviceId,
+      contractorId: null,
+      description: description.trim(),
+      location: location.trim(),
+      urgency,
+      estimatedDuration,
+      budget,
+      requestDate: new Date().toISOString(),
+      serviceDate: null,
+      isActive: true,
+    };
+
+    await createServiceRequest(payload);
+
+    // ✅ Cambio para 2.3 - Mostrar éxito antes de buscar contratista
+    await Swal.fire({
+      icon: "success",
+      title: "Solicitud enviada",
+      text: "Tu solicitud fue registrada correctamente. Estamos buscando contratistas.",
+    });
+
+    setServiceRequest("searching");
+    setSearchProgress(0);
+
+    interval = window.setInterval(() => {
+      setSearchProgress((prev) => {
+        if (prev >= 100) {
+          if (interval) window.clearInterval(interval);
+          setServiceRequest("found");
+          return 100;
+        }
+        return prev + 12;
+      });
+    }, 250);
+  } catch (err: any) {
+    console.error("Error creando la solicitud", err);
+    await Swal.fire({
+      icon: "error",
+      title: "No pudimos crear la solicitud",
+      text: err?.response?.data?.message ?? "Intenta de nuevo.",
+    });
+  } finally {
+    setLoading(false);
+    if (interval) window.clearInterval(interval);
+  }
+};
+
+  useEffect(() => {
+  if (activeTab === "home" && serviceRequest !== "idle") {
+    setTimeout(() => {
+      Swal.fire({
+        toast: true,
+        position: "top-end",
         icon: "info",
-        title: "Campos incompletos",
-        text: "Por favor completa la descripción y la ubicación.",
+        title:
+          serviceRequest === "searching"
+            ? "Buscando contratistas aún..."
+            : serviceRequest === "in-progress"
+            ? "Tienes un servicio en progreso"
+            : "Solicitud activa",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
       });
-      return;
-    }
+    }, 500); // Pequeño delay para no estorbar animaciones
+  }
+}, [activeTab, serviceRequest]);
 
-    setLoading(true);
-    let interval: number | undefined;
 
-    try {
-      const payload: CreateServiceRequestDto = {
-        clientId: user.userId,
-        serviceId,
-        contractorId: null,
-        description: description.trim(),
-        location: location.trim(),
-        urgency,
-        estimatedDuration,
-        budget,
-        requestDate: new Date().toISOString(),
-        serviceDate: null,
-        isActive: true,
-      };
-
-      await createServiceRequest(payload);
-
-      setServiceRequest("searching");
-      setSearchProgress(0);
-
-      interval = window.setInterval(() => {
-        setSearchProgress((prev) => {
-          if (prev >= 100) {
-            if (interval) window.clearInterval(interval);
-            setServiceRequest("found");
-            return 100;
-          }
-          return prev + 12;
-        });
-      }, 250);
-    } catch (err: any) {
-      console.error("Error creando la solicitud", err);
-      await Swal.fire({
-        icon: "error",
-        title: "No pudimos crear la solicitud",
-        text: err?.response?.data?.message ?? "Intenta de nuevo.",
-      });
-    } finally {
-      setLoading(false);
-      if (interval) window.clearInterval(interval);
-    }
-  };
 
   const handleAcceptContractor = () => {
     setServiceRequest("in-progress");

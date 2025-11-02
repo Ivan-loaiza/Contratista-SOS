@@ -4,15 +4,23 @@ import { createServiceRequest } from "@/services/ServiceRequestApi";
 import type { CreateServiceRequestDto } from "@/types/service-request";
 
 export function useServiceRequest() {
+  // 🔹 Estados principales del flujo
   const [status, setStatus] = useState<"idle" | "searching" | "found" | "in-progress">("idle");
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [acceptedBy, setAcceptedBy] = useState<string | null>(null); // ✅ nuevo estado
 
+  // 🔹 Enviar solicitud al backend
   const requestService = async (payload: CreateServiceRequestDto) => {
     try {
       setLoading(true);
-      await createServiceRequest(payload);
       setStatus("searching");
+      setProgress(0);
+
+      // Llamada a la API (POST /api/ServiceRequests)
+      await createServiceRequest(payload);
+
+      // Simulación de búsqueda progresiva (efecto visual)
       let current = 0;
       const interval = setInterval(() => {
         current += 10;
@@ -20,14 +28,37 @@ export function useServiceRequest() {
         if (current >= 100) {
           clearInterval(interval);
           setStatus("found");
+
+          // Simulación de contratista encontrado (mock temporal)
+          setAcceptedBy("Carlos Rodríguez");
+
+          Swal.fire({
+            icon: "success",
+            title: "¡Contratista encontrado!",
+            text: "Se ha asignado un profesional para tu solicitud.",
+            confirmButtonColor: "#2563eb",
+          });
         }
-      }, 200);
+      }, 250);
     } catch (e) {
-      Swal.fire({ icon: "error", title: "Error", text: "No se pudo crear la solicitud" });
+      console.error(e);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudo crear la solicitud. Inténtalo de nuevo.",
+      });
+      setStatus("idle");
     } finally {
       setLoading(false);
     }
   };
 
-  return { status, progress, loading, requestService, setStatus };
+  return {
+    status,
+    progress,
+    loading,
+    requestService,
+    setStatus,
+    acceptedBy, // ✅ se devuelve al componente
+  };
 }

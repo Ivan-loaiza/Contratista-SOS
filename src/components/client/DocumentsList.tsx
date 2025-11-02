@@ -43,8 +43,8 @@ export const DocumentsList = () => {
             {/* 💰 Sección derecha: monto + estado */}
             <div className="text-right">
               <p className="font-medium text-base">
-                ${doc.total.toFixed(2)}
-              </p>
+  ${doc.total ? doc.total.toFixed(2) : "0.00"}
+</p>
               <Badge
                 variant={
                   doc.status === "Pagada"

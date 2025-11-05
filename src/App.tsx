@@ -1,7 +1,9 @@
 // src/App.tsx
 import React, { Suspense, useEffect } from "react";
-import { useLocation } from "react-router-dom";
-import AppRoutes from "./routes";
+import { BrowserRouter, useLocation } from "react-router-dom";
+import AppRoutes from "./routes/AppRoutes";
+import { AuthProvider } from "./context/AuthContext";
+import { ClientDashboardProvider } from "./context/ClientDashboardContext";
 
 /* ============ Loader global muy simple ============ */
 function GlobalLoader() {
@@ -82,13 +84,19 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <AppShell>
-      <ScrollToTop />
-      <ErrorBoundary>
-        <Suspense fallback={<GlobalLoader />}>
-          <AppRoutes />
-        </Suspense>
-      </ErrorBoundary>
-    </AppShell>
+    <AuthProvider>
+      <ClientDashboardProvider>
+        <BrowserRouter>
+          <AppShell>
+            <ScrollToTop />
+            <ErrorBoundary>
+              <Suspense fallback={<GlobalLoader />}>
+                <AppRoutes />
+              </Suspense>
+            </ErrorBoundary>
+          </AppShell>
+        </BrowserRouter>
+      </ClientDashboardProvider>
+    </AuthProvider>
   );
 }

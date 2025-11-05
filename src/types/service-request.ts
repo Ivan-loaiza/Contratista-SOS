@@ -13,3 +13,56 @@ export interface CreateServiceRequestDto {
   serviceDate: string | null;    // Fecha opcional (puede ser null)
   isActive: boolean;             // Activo / inactivo
 }
+
+/** Historial de solicitud de servicio con información de calificación */
+export interface ServiceRequestHistory {
+  requestId: number;
+  clientId: number;
+  clientName: string;
+  contractorId: number | null;
+  contractorName: string | null;
+  contractorAvatarUrl: string | null;
+  serviceId: number;
+  serviceName: string;
+  description: string;
+  location: string;
+  urgency: UrgencyLevel;
+  estimatedDuration: string;
+  budget: string;
+  requestDate: string;
+  serviceDate: string | null;
+  isActive: boolean;
+  hasRating: boolean;
+  ratingStars: number | null;
+
+  // Estados del flujo
+  status: string; // "Pendiente" | "Aceptada" | "Finalizada" | "Cancelada"
+  acceptedDate: string | null;
+  scheduledVisitDate: string | null;
+  scheduledVisitTime: string | null;
+  visitNotes: string | null;
+  completedDate: string | null;
+
+  // Documento de proforma/cotización
+  proformaDocumentUrl: string | null;
+  proformaUploadedDate: string | null;
+
+  // Información de pago
+  paymentStatus: string; // "Pendiente" | "Pagado"
+  paymentMethod: string; // "Efectivo" | "Transferencia"
+  paymentProofUrl: string | null;
+  paidDate: string | null;
+}
+
+/** DTO para cancelar solicitud */
+export interface CancelRequestDto {
+  clientId: number;
+  cancellationReason?: string;
+}
+
+/** DTO para registrar pago */
+export interface RegisterPaymentDto {
+  clientId: number;
+  paymentMethod: "Efectivo" | "Transferencia";
+  paymentProofUrl?: string;
+}

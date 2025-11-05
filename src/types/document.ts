@@ -65,3 +65,18 @@ export interface Document {
   contractorName?: string;
   clientName?: string;
 }
+
+/**
+ * ClientDocumentDto - Respuesta simplificada del endpoint /Documents/mine
+ * Corresponde a la respuesta del Swagger
+ */
+export interface ClientDocumentDto {
+  id: number;
+  requestId: number;
+  contractorName: string;
+  kind: DocumentKind;
+  amount: number;
+  date: string; // ISO string
+  status: DocumentStatus;
+  pdfUrl: string;
+}

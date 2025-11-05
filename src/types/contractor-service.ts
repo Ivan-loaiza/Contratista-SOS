@@ -1,4 +1,5 @@
 // src/types/contractor-service.ts
+import type { Service } from "./service";
 
 export interface ContractorRole {
   name: string;
@@ -18,9 +19,5 @@ export interface ContractorServiceDto {
   contractorId: number;
   contractor: ContractorUser;
   serviceId: number;
-  service?: {
-    serviceId: number;
-    name: string;
-    description?: string;
-  } | null;
+  service?: Service | null;
 }

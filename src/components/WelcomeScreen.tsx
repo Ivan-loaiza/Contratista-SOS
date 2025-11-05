@@ -51,7 +51,7 @@ export function WelcomeScreen({ initialTab = 'login' }: WelcomeScreenProps) {
   const [specialties, setSpecialties] = useState('');
   const [serviceId] = useState<number>(1);
   const [experienceYears] = useState<number>(0);
-  const [availability] = useState<string>('Tiempo completo');
+  const [availability] = useState<"Tiempo completo" | "Medio tiempo" | "Por horas">('Tiempo completo');
   const [preferredLocation] = useState<string>('');
 
   const isContractorRole = (roles?: string[]) =>

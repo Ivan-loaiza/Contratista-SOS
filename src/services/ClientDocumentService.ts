@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Document, DocumentStatus } from "@/types/document";
+import type { Document, DocumentStatus, ClientDocumentDto } from "@/types/document";
 
 /**
  * ⚙️ Configuración de Axios con interceptor para token
@@ -25,11 +25,12 @@ API.interceptors.request.use((config) => {
  * 📄 Obtiene todos los documentos del cliente autenticado
  * ✅ Ruta real confirmada por Swagger:
  * GET /api/Documents/mine?clientId={clientId}
+ * @returns {ClientDocumentDto[]} Array de documentos simplificados
  */
-export async function listDocumentsForClient(clientId: number): Promise<Document[]> {
+export async function listDocumentsForClient(clientId: number): Promise<ClientDocumentDto[]> {
   const url = `/Documents/mine?clientId=${clientId}`;
-  const res = await API.get(url);
-  return res.data as Document[];
+  const res = await API.get<ClientDocumentDto[]>(url);
+  return res.data;
 }
 
 /**

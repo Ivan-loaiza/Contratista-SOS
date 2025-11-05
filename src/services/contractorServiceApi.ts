@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { ContractorServiceDto, ContractorUser } from "@/types/contractor-service";
+import type { Service } from "@/types/service";
 
 // 🔧 Configuración del cliente Axios
 const API = axios.create({
@@ -32,22 +33,26 @@ export async function listContractorServices(): Promise<ContractorServiceDto[]> 
 
 /**
  * 🔹 Obtiene los contratistas que ofrecen un servicio específico.
- * Filtra también los que **no son administradores**.
+ * Usa el endpoint: GET /api/ContractorService/service/{serviceId}
  */
 export async function getContractorsByService(serviceId: number): Promise<ContractorUser[]> {
-  const all = await listContractorServices();
+  const response = await API.get(`/ContractorService/service/${serviceId}`);
 
-  const filtered = all
-    .filter(
-      (item) =>
-        item.serviceId === serviceId &&
-        !item.contractor.userRoles?.some(
-          (role) => role.name?.toLowerCase() === "admin"
-        )
-    )
-    .map((item) => item.contractor);
+  const apiResponse = response.data;
 
-  return filtered;
+  if (!apiResponse.isSuccess || !apiResponse.data) {
+    return [];
+  }
+
+  return apiResponse.data.map((fullName: string) => ({
+    userId: 0,
+    fullName: fullName,
+    email: '',
+    phone: '',
+    avatarUrl: null,
+    isActive: true,
+    userRoles: [],
+  }));
 }
 
 /**
@@ -79,4 +84,13 @@ export async function assignServiceToContractor(payload: {
  */
 export async function deleteContractorService(id: number): Promise<void> {
   await API.delete(`/ContractorService/${id}`);
+}
+
+/**
+ * 🔹 Lista todos los servicios disponibles en el sistema.
+ * GET /api/Service
+ */
+export async function listServices(): Promise<Service[]> {
+  const res = await API.get<Service[]>("/Service");
+  return res.data;
 }

@@ -35,18 +35,23 @@
 // }
 import { useState, useEffect } from "react";
 import { listDocumentsForClient } from "@/services/ClientDocumentService";
-import type { Document } from "@/types/document";
+import type { ClientDocumentDto } from "@/types/document";
 
 /**
  * Hook personalizado para obtener los documentos del cliente autenticado
+ * Retorna directamente el DTO simplificado del Swagger
  */
 export function useClientDocuments(clientId?: number) {
-  const [docs, setDocs] = useState<Document[]>([]);
+  const [docs, setDocs] = useState<ClientDocumentDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId) {
+      setDocs([]);
+      return;
+    }
+
     let cancelled = false;
 
     const fetchDocs = async () => {
@@ -55,30 +60,12 @@ export function useClientDocuments(clientId?: number) {
 
       try {
         const data = await listDocumentsForClient(clientId);
-
-        // 🔁 Adaptamos los campos del DTO (Swagger) al modelo Document del frontend
-        const mapped: Document[] = data.map((d: any) => ({
-          documentId: d.id,
-          requestId: d.requestId,
-          clientId: 0, // si no lo devuelve la API
-          contractorId: 0, // si no lo devuelve la API
-          kind: d.kind,
-          status: d.status,
-          total: d.amount, // 👈 el total real
-          notes: null,
-          pdfUrl: d.pdfUrl ?? null,
-          createdAt: d.date,
-          header: null,
-          footer: null,
-          items: [],
-          contractorName: d.contractorName,
-          clientName: undefined,
-        }));
-
-        if (!cancelled) setDocs(mapped);
+        if (!cancelled) setDocs(data);
       } catch (err: any) {
-        if (!cancelled)
+        if (!cancelled) {
+          console.error("Error cargando documentos:", err);
           setError(err.message ?? "Error al cargar documentos del cliente");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -90,5 +77,5 @@ export function useClientDocuments(clientId?: number) {
     };
   }, [clientId]);
 
-  return { docs, loading, error };
+  return { docs, loading, error, hasDocs: docs.length > 0 };
 }

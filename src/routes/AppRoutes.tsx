@@ -4,7 +4,7 @@ import { WelcomeScreen } from "@/components/WelcomeScreen";
 import { useAuth } from "@/context/AuthContext";
 import { ClientDashboardProvider } from "@/context/ClientDashboardContext";
 import ClientDashboard from "@/components/client/ClientDashboard";
-import { ContractorDashboard } from "@/components/ContractorDashboard";
+import { ContractorDashboard } from "@/components/contractor/ContractorDashboard";
 
 export default function AppRoutes() {
   const { isAuthenticated, hasRole, user, logout } = useAuth();

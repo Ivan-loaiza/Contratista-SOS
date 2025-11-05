@@ -1,6 +1,6 @@
 // src/routes/contractorRoutes.tsx
 import { Navigate } from "react-router-dom";
-import { ContractorDashboard } from "@/components/ContractorDashboard";
+import { ContractorDashboard } from "@/components/contractor/ContractorDashboard";
 import { Login } from "@/pages/Login";
 import type { RouteObject } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";

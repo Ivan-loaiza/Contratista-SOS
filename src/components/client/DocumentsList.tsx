@@ -1,74 +1,77 @@
-// src/components/DocumentsList.tsx
 import { useAuth } from "@/context/AuthContext";
 import { useClientDocuments } from "@/hooks/useClientDocuments";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { FileText } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DocumentCard } from "./DocumentCard";
+import type { ClientDocumentDto } from "@/types/document";
+import Swal from "sweetalert2";
 
 export const DocumentsList = () => {
   const { user } = useAuth();
   const { docs, loading, error } = useClientDocuments(user?.userId);
 
-  if (loading) return <p>Cargando documentos...</p>;
-  if (error) return <p className="text-red-500">{error}</p>;
-  if (!docs.length) return <p>No hay documentos disponibles.</p>;
+  const handlePayDocument = async (document: ClientDocumentDto) => {
+    const documentType = document.kind === "Factura" ? "factura" : document.kind.toLowerCase();
+
+    await Swal.fire({
+      icon: "info",
+      title: "Pagar documento",
+      html: `
+        <div style="text-align:left">
+          <p>Estás por pagar la <b>${documentType}</b> de <b>${document.contractorName}</b>.</p>
+          <p>Monto: <b>$${document.amount.toFixed(2)}</b></p>
+          <p class="mt-2">Integra aquí tu flujo de pago.</p>
+        </div>
+      `,
+      confirmButtonText: "Entendido",
+    });
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Cotizaciones, Proformas y Facturas</CardTitle>
+          <CardDescription>Gestiona todos los documentos enviados por los contratistas</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-sm text-muted-foreground">Cargando documentos...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Cotizaciones, Proformas y Facturas</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-red-500">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      {docs.map((doc) => (
-        <Card key={doc.documentId}>
-          <CardContent className="flex justify-between items-center p-4">
-            {/* 🧾 Sección izquierda: tipo de documento y contratista */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <FileText className="text-blue-600" />
-              </div>
-              <div>
-                <p className="font-semibold capitalize">
-                  {doc.kind === "Cotizacion"
-                    ? "Cotización"
-                    : doc.kind === "Factura"
-                    ? "Factura"
-                    : "Proforma"}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {doc.contractorName ?? "Contratista desconocido"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {new Date(doc.createdAt).toLocaleDateString()}
-                </p>
-              </div>
-            </div>
-
-            {/* 💰 Sección derecha: monto + estado */}
-            <div className="text-right">
-              <p className="font-medium text-base">
-  ${doc.total ? doc.total.toFixed(2) : "0.00"}
-</p>
-              <Badge
-                variant={
-                  doc.status === "Pagada"
-                    ? "default"
-                    : doc.status === "Pendiente"
-                    ? "secondary"
-                    : "outline"
-                }
-                className={
-                  doc.status === "Pagada"
-                    ? "bg-green-100 text-green-700"
-                    : doc.status === "Pendiente"
-                    ? "bg-yellow-100 text-yellow-700"
-                    : doc.status === "Revision"
-                    ? "bg-blue-100 text-blue-700"
-                    : "bg-gray-100 text-gray-700"
-                }
-              >
-                {doc.status}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Cotizaciones, Proformas y Facturas</CardTitle>
+        <CardDescription>Gestiona todos los documentos enviados por los contratistas</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {docs.length === 0 ? (
+          <div className="text-sm text-muted-foreground">
+            Aún no tienes documentos. Cuando el contratista envíe uno, aparecerá aquí.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {docs.map((doc) => (
+              <DocumentCard key={doc.id} document={doc} onPayClick={handlePayDocument} />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 };

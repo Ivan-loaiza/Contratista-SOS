@@ -128,6 +128,7 @@ export interface ContractorServiceRequest {
   requestDate: string;
   serviceDate: string | null;
   isActive: boolean;
+  status: string; // "Pendiente" | "Aceptada" | "Finalizada" | "Cancelada"
   scheduledVisitDate: string | null;
   scheduledVisitTime: string | null;
   visitNotes: string | null;

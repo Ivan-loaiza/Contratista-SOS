@@ -10,14 +10,14 @@ import { Badge } from "../ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import {
   MapPin,
-  Clock,
+  //Clock,
   DollarSign,
   Calendar,
   FileText,
   User,
   CheckCircle,
   AlertCircle,
-  Star,
+  //Star,
 } from "lucide-react";
 import type { ContractorServiceRequest } from "@/services/ServiceRequestApi";
 

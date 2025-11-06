@@ -6,54 +6,140 @@ const API_BASE =
   import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "https://localhost:7095";
 
 /** Tipos de documento soportados por el backend */
-export type DocKind = "cotizacion" | "factura" | "proforma";
+// Para enviar al backend (números)
+export type DocumentKind = 0 | 1;  // 0 = Cotizacion, 1 = Factura
+// Para recibir del backend (strings)
+export type DocumentKindResponse = "Cotizacion" | "Factura";
 
-/** Ítems de la cotización/factura/proforma */
-export interface DocumentItemDto {
+/** Tipos de item en un documento */
+export type DocumentItemType = 0 | 1;  // 0 = Service (horas × tarifa), 1 = Material (cantidad × precio unitario)
+
+/** Estado del documento */
+// Para enviar al backend (números)
+export type DocumentStatus = 0 | 1;  // 0 = Pendiente, 1 = Pagado
+// Para recibir del backend (strings)
+export type DocumentStatusResponse = "Pendiente" | "Pagado";
+
+/** Item de documento - puede ser servicio o material */
+export interface CreateDocumentItemDto {
+  itemType: DocumentItemType;
   description: string;
-  hours: number; // horas
-  rate: number;  // tarifa x hora
+
+  // Campos para SERVICIOS (itemType = 0)
+  hours?: number;
+  hourlyRate?: number;
+
+  // Campos para MATERIALES (itemType = 1)
+  quantity?: number;
+  unit?: string;        // "metros", "kg", "unidades", etc.
+  unitPrice?: number;
 }
 
-/** ✅ DTO para crear documento (incluye 'kind') */
+/** DTO para crear documento */
 export interface CreateDocumentDto {
-  requestId: number;          // id de la ServiceRequest asociada
-  kind: DocKind;              // <-- faltaba este campo en tu tipo
-  items: DocumentItemDto[];   // detalle
-  total: number;              // total calculado
-  notes?: string;             // opcional
+  requestId: number;
+  clientId: number;
+  contractorId: number;
+  kind: DocumentKind;
+  total?: number;  // Opcional, se calcula automáticamente
+  items: CreateDocumentItemDto[];
+  notes?: string;
 }
 
-/** Lo que devuelve el backend al listar mis documentos enviados */
-export interface OutgoingDocument {
+/** Respuesta al crear/listar documento */
+export interface ClientDocumentDto {
   id: number;
   requestId: number;
-  kind: DocKind;
-  clientName: string;
+  contractorId: number;
+  contractorName: string;
+  contractorEmail?: string;
+  contractorPhone?: string | null;
+  contractorAddress?: string | null;
+  contractorAvatarUrl?: string | null;
+  kind: DocumentKindResponse;  // El backend devuelve string
   amount: number;
-  date: string; // ISO
-  status: "Pendiente" | "Pagada" | "Enviada" | "Revisión";
+  date: string;
+  status: DocumentStatusResponse;  // El backend devuelve string
+  pdfUrl?: string;
+}
+
+/** Documento completo con items */
+export interface DocumentDetailDto {
+  documentId: number;
+  requestId: number;
+  clientId: number;
+  contractorId: number;
+  kind: DocumentKind;
+  status: DocumentStatus;
+  total: number;
+  notes?: string | null;
+  createdAt: string;
   pdfUrl?: string | null;
+  items: DocumentItemDetailDto[];
+}
+
+/** Item de documento con detalles */
+export interface DocumentItemDetailDto {
+  itemId: number;
+  documentId: number;
+  itemType: DocumentItemType;
+  description: string;
+  hours?: number | null;
+  hourlyRate?: number | null;
+  quantity?: number | null;
+  unit?: string | null;
+  unitPrice?: number | null;
+}
+
+/** DTO para registrar pago */
+export interface RegisterPaymentDto {
+  clientId: number;
+  paymentMethod: "Efectivo" | "Transferencia";
+  paymentProofUrl?: string;
+  notes?: string;
+}
+
+/** Respuesta al registrar pago */
+export interface RegisterPaymentResultDto {
+  success: boolean;
+  message: string;
+  documentId: number;
+  requestId: number;
+  paymentStatus: string;
+  paymentMethod: string;
+  paidDate: string;
 }
 
 /** Crea un documento para una solicitud aceptada */
 export async function createDocument(dto: CreateDocumentDto, contractorId: number) {
   const url = `${API_BASE}/api/Documents?contractorId=${contractorId}`;
   const res = await axios.post(url, dto);
-  return res.data as { id: number };
+  return res.data as ClientDocumentDto;
 }
 
-/** Lista los documentos del contratista autenticado */
-export async function listMyDocuments() {
-  // Ajusta si tu endpoint es /api/Documents/contractor o similar
-  const url = `${API_BASE}/api/Documents/mine`;
+/** Lista los documentos del cliente */
+export async function listMyDocuments(clientId: number) {
+  const url = `${API_BASE}/api/Documents/mine?clientId=${clientId}`;
   const res = await axios.get(url);
-  return res.data as OutgoingDocument[];
+  const documents = res.data as ClientDocumentDto[];
+
+  // Convertir URLs relativas a absolutas
+  return documents.map(doc => ({
+    ...doc,
+    pdfUrl: doc.pdfUrl ? `${API_BASE}${doc.pdfUrl}` : undefined
+  }));
 }
 
-/** (Opcional) lista documentos de un cliente específico */
-export async function listClientDocuments(clientId: number) {
-  const url = `${API_BASE}/api/Documents/client/${clientId}`;
+/** Obtiene documentos por solicitud */
+export async function getDocumentsByRequest(requestId: number) {
+  const url = `${API_BASE}/api/Documents/by-request/${requestId}`;
   const res = await axios.get(url);
-  return res.data as OutgoingDocument[];
+  return res.data as DocumentDetailDto[];
+}
+
+/** Registra el pago de un documento */
+export async function registerDocumentPayment(documentId: number, dto: RegisterPaymentDto) {
+  const url = `${API_BASE}/api/Documents/${documentId}/pay`;
+  const res = await axios.post(url, dto);
+  return res.data as RegisterPaymentResultDto;
 }

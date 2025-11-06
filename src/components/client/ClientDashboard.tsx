@@ -30,7 +30,11 @@ export default function ClientDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <DashboardHeader title="Panel Cliente" subtitle="SOS Service-on demand">
+      <DashboardHeader
+        title="Panel Cliente"
+        subtitle="SOS Service-on demand"
+        showNotifications={true}
+      >
         <Button variant="outline" onClick={logout}>
           <LogOut className="w-4 h-4 mr-2" />
           Cerrar Sesión

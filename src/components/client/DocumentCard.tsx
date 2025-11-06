@@ -1,9 +1,8 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, Eye } from "lucide-react";
-import type { ClientDocumentDto } from "@/types/document";
-import { downloadPDF, openPDFInNewTab, generateDocumentFilename } from "@/utils/pdfUtils";
+import { FileText, Download, Eye, DollarSign } from "lucide-react";
+import type { ClientDocumentDto } from "@/services/DocumentApi";
 import Swal from "sweetalert2";
 
 interface DocumentCardProps {
@@ -20,7 +19,7 @@ export const DocumentCard = ({ document, onPayClick }: DocumentCardProps) => {
       });
       return;
     }
-    openPDFInNewTab(document.pdfUrl);
+    window.open(document.pdfUrl, "_blank");
   };
 
   const handleDownload = async () => {
@@ -33,12 +32,12 @@ export const DocumentCard = ({ document, onPayClick }: DocumentCardProps) => {
     }
 
     try {
-      const filename = generateDocumentFilename(
-        document.kind,
-        document.contractorName,
-        document.date
-      );
-      await downloadPDF(document.pdfUrl, filename);
+      // Crear un enlace temporal para descargar
+      const link = window.document.createElement("a");
+      link.href = document.pdfUrl;
+      const docType = document.kind;
+      link.download = `${docType}_${document.id}_${new Date(document.date).toLocaleDateString()}.pdf`;
+      link.click();
 
       Swal.fire({
         icon: "success",
@@ -57,31 +56,17 @@ export const DocumentCard = ({ document, onPayClick }: DocumentCardProps) => {
   };
 
   const getDocumentTypeLabel = (kind: string): string => {
-    switch (kind) {
-      case "Cotizacion":
-        return "Cotización";
-      case "Factura":
-        return "Factura";
-      case "Proforma":
-        return "Proforma";
-      default:
-        return kind;
-    }
+    return kind === "Cotizacion" ? "Cotización" : "Factura";
+  };
+
+  const getStatusLabel = (status: string): string => {
+    return status === "Pendiente" ? "Pendiente" : "Pagado";
   };
 
   const getBadgeClass = (status: string): string => {
-    switch (status) {
-      case "Pagada":
-        return "bg-green-100 text-green-700";
-      case "Pendiente":
-        return "bg-yellow-100 text-yellow-700";
-      case "Enviada":
-        return "bg-blue-100 text-blue-700";
-      case "Revision":
-        return "bg-gray-100 text-gray-700";
-      default:
-        return "bg-gray-100 text-gray-700";
-    }
+    return status === "Pendiente"
+      ? "bg-yellow-100 text-yellow-700"
+      : "bg-green-100 text-green-700";
   };
 
   return (
@@ -114,30 +99,34 @@ export const DocumentCard = ({ document, onPayClick }: DocumentCardProps) => {
           <div className="text-right shrink-0">
             <div className="text-lg font-semibold">${document.amount.toFixed(2)}</div>
             <Badge variant="secondary" className={getBadgeClass(document.status)}>
-              {document.status}
+              {getStatusLabel(document.status)}
             </Badge>
           </div>
 
           <div className="flex gap-2 shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleView}
-              title="Ver documento"
-            >
-              <Eye className="w-4 h-4 mr-1" />
-              Ver
-            </Button>
+            {document.pdfUrl && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleView}
+                  title="Ver documento"
+                >
+                  <Eye className="w-4 h-4 mr-1" />
+                  Ver
+                </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDownload}
-              title="Descargar documento"
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Descargar
-            </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownload}
+                  title="Descargar documento"
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  Descargar
+                </Button>
+              </>
+            )}
 
             {document.status === "Pendiente" && onPayClick && (
               <Button
@@ -145,6 +134,7 @@ export const DocumentCard = ({ document, onPayClick }: DocumentCardProps) => {
                 className="bg-blue-600 hover:bg-blue-700"
                 onClick={() => onPayClick(document)}
               >
+                <DollarSign className="w-4 h-4 mr-1" />
                 Pagar
               </Button>
             )}

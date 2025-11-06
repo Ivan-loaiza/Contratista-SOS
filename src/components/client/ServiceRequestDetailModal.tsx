@@ -22,6 +22,10 @@ import {
 } from "lucide-react";
 import type { ServiceRequestHistory } from "@/types/service-request";
 import { openPDFInNewTab } from "@/utils/pdfUtils";
+import { cancelServiceRequest } from "@/services/ServiceRequestApi";
+import { useAuth } from "@/context/AuthContext";
+import { toast } from "sonner";
+import { useState } from "react";
 
 interface ServiceRequestDetailModalProps {
   isOpen: boolean;
@@ -34,7 +38,10 @@ export const ServiceRequestDetailModal = ({
   isOpen,
   onClose,
   request,
+  onUpdate,
 }: ServiceRequestDetailModalProps) => {
+  const { user } = useAuth();
+  const [cancelling, setCancelling] = useState(false);
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
@@ -95,6 +102,42 @@ export const ServiceRequestDetailModal = ({
     if (request.proformaDocumentUrl) {
       openPDFInNewTab(request.proformaDocumentUrl);
     }
+  };
+
+  const handleCancelRequest = async () => {
+    if (!user?.userId) return;
+
+    if (!confirm("¿Estás seguro de que deseas cancelar esta solicitud?")) {
+      return;
+    }
+
+    try {
+      setCancelling(true);
+      await cancelServiceRequest(request.requestId, user.userId);
+      toast.success("Solicitud cancelada exitosamente");
+      onUpdate?.();
+      onClose();
+    } catch (err: any) {
+      console.error("Error al cancelar solicitud:", err);
+      toast.error(err.response?.data?.message || "No se pudo cancelar la solicitud");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const canCancel = () => {
+    // Debug: ver los valores
+    console.log("canCancel check:", {
+      isActive: request.isActive,
+      status: request.status,
+      paymentStatus: request.paymentStatus,
+    });
+
+    // Permitir cancelar si está activa, en estado Pendiente o Aceptada, y no está pagada
+    const isPendingOrAccepted = request.status === "Pendiente" || request.status === "Aceptada";
+    const isNotPaid = !request.paymentStatus || request.paymentStatus !== "Pagado";
+
+    return request.isActive && isPendingOrAccepted && isNotPaid;
   };
 
   return (
@@ -337,7 +380,28 @@ export const ServiceRequestDetailModal = ({
           </div>
         </div>
 
-        <div className="flex justify-end pt-4">
+        <div className="flex justify-between pt-4">
+          <div>
+            {canCancel() && (
+              <Button
+                variant="destructive"
+                onClick={handleCancelRequest}
+                disabled={cancelling}
+              >
+                {cancelling ? (
+                  <>
+                    <XCircle className="w-4 h-4 mr-2 animate-spin" />
+                    Cancelando...
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Cancelar Solicitud
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
           <Button onClick={onClose}>Cerrar</Button>
         </div>
       </DialogContent>

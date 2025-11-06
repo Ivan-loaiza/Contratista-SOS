@@ -11,7 +11,7 @@ import { VisitSchedulerModal } from "./VisitSchedulerModal";
 import { QuotationFormModal } from "./QuotationFormModal";
 import { ServiceDetailModal } from "./ServiceDetailModal";
 import { AcceptRequestModal } from "./AcceptRequestModal";
-import type { ServiceRequestHistory } from "@/types/service-request";
+//import type { ServiceRequestHistory } from "@/types/service-request";
 import { useAuth } from "@/context/AuthContext";
 import {
   getServiceRequests,
@@ -109,16 +109,27 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
     if (!selectedRequestToAccept) return;
 
     try {
+      // Guardar los datos de la solicitud antes de que se cierre el modal
+      const requestData = {
+        clientName: selectedRequestToAccept.clientName,
+        serviceName: selectedRequestToAccept.serviceName,
+        visitDate: data.scheduledVisitDate,
+        visitTime: data.scheduledVisitTime,
+      };
+
       await acceptServiceRequest(selectedRequestToAccept.requestId, data);
+
+      // Esperar un momento para que el modal se cierre completamente
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       await Swal.fire({
         icon: "success",
         title: "Solicitud aceptada",
         html: `
           <div style="text-align:left">
-            <p><b>Cliente:</b> ${selectedRequestToAccept.clientName}</p>
-            <p><b>Servicio:</b> ${selectedRequestToAccept.serviceName}</p>
-            <p><b>Visita programada:</b> ${new Date(data.scheduledVisitDate).toLocaleDateString()} a las ${data.scheduledVisitTime}</p>
+            <p><b>Cliente:</b> ${requestData.clientName}</p>
+            <p><b>Servicio:</b> ${requestData.serviceName}</p>
+            <p><b>Visita programada:</b> ${new Date(requestData.visitDate).toLocaleDateString()} a las ${requestData.visitTime}</p>
             <p class="mt-2">El cliente ha sido notificado.</p>
           </div>
         `,
@@ -168,19 +179,39 @@ export function ContractorDashboard({ onLogout }: ContractorDashboardProps) {
   // Handler: Enviar cotización
   const handleSendQuotation = async (data: {
     requestId: number;
-    kind: "cotizacion" | "factura" | "proforma";
-    items: Array<{ description: string; hours: number; rate: number }>;
+    clientId: number;
+    contractorId: number;
+    kind: 0 | 1;
+    items: Array<{
+      itemType: 0 | 1;
+      description: string;
+      hours?: number;
+      hourlyRate?: number;
+      quantity?: number;
+      unit?: string;
+      unitPrice?: number;
+    }>;
     notes: string;
-    total: number;
+    total?: number;
   }) => {
     if (!user?.userId) return;
 
     try {
       await createDocument(
         {
-          kind: data.kind,
           requestId: data.requestId,
-          items: data.items,
+          clientId: data.clientId,
+          contractorId: data.contractorId,
+          kind: data.kind as 0 | 1,
+          items: data.items as Array<{
+            itemType: 0 | 1;
+            description: string;
+            hours?: number;
+            hourlyRate?: number;
+            quantity?: number;
+            unit?: string;
+            unitPrice?: number;
+          }>,
           notes: data.notes,
           total: data.total,
         },

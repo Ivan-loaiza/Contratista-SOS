@@ -12,16 +12,22 @@ import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
-import { Plus, XCircle, Calculator, Receipt, FileCheck, FileText } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { XCircle, Calculator, Receipt, FileText, Wrench, Package } from "lucide-react";
 import type { ContractorServiceRequest } from "@/services/ServiceRequestApi";
+import type { DocumentKind, DocumentItemType, CreateDocumentItemDto } from "@/services/DocumentApi";
 import Swal from "sweetalert2";
 
-type DocumentKind = "cotizacion" | "factura" | "proforma";
-
-interface ServiceItem {
+interface DocumentItem {
+  itemType: DocumentItemType; // 0 = Service, 1 = Material
   description: string;
-  hours: string;
-  rate: string;
+  // Para servicios
+  hours?: string;
+  hourlyRate?: string;
+  // Para materiales
+  quantity?: string;
+  unit?: string;
+  unitPrice?: string;
 }
 
 interface QuotationFormModalProps {
@@ -30,10 +36,12 @@ interface QuotationFormModalProps {
   request: ContractorServiceRequest | null;
   onSubmit: (data: {
     requestId: number;
+    clientId: number;
+    contractorId: number;
     kind: DocumentKind;
-    items: Array<{ description: string; hours: number; rate: number }>;
+    items: CreateDocumentItemDto[];
     notes: string;
-    total: number;
+    total?: number;
   }) => Promise<void>;
 }
 
@@ -43,9 +51,9 @@ export function QuotationFormModal({
   request,
   onSubmit,
 }: QuotationFormModalProps) {
-  const [documentType, setDocumentType] = useState<DocumentKind>("cotizacion");
-  const [serviceItems, setServiceItems] = useState<ServiceItem[]>([
-    { description: "", hours: "", rate: "" },
+  const [documentType, setDocumentType] = useState<DocumentKind>(0); // 0 = Cotizacion
+  const [items, setItems] = useState<DocumentItem[]>([
+    { itemType: 0, description: "", hours: "", hourlyRate: "" },
   ]);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
@@ -61,29 +69,69 @@ export function QuotationFormModal({
     }
   });
 
+  // Calculate total
   const total = useMemo(() => {
-    return serviceItems.reduce((acc, item) => {
-      const h = parseFloat(item.hours || "0") || 0;
-      const r = parseFloat(item.rate || "0") || 0;
-      return acc + h * r;
+    return items.reduce((acc, item) => {
+      if (item.itemType === 0) {
+        // Service
+        const h = parseFloat(item.hours || "0") || 0;
+        const r = parseFloat(item.hourlyRate || "0") || 0;
+        return acc + h * r;
+      } else {
+        // Material
+        const q = parseFloat(item.quantity || "0") || 0;
+        const p = parseFloat(item.unitPrice || "0") || 0;
+        return acc + q * p;
+      }
     }, 0);
-  }, [serviceItems]);
+  }, [items]);
 
-  const addServiceItem = () => {
-    setServiceItems((prev) => [...prev, { description: "", hours: "", rate: "" }]);
+  const addItem = (type: DocumentItemType) => {
+    if (type === 0) {
+      setItems((prev) => [
+        ...prev,
+        { itemType: 0, description: "", hours: "", hourlyRate: "" },
+      ]);
+    } else {
+      setItems((prev) => [
+        ...prev,
+        { itemType: 1, description: "", quantity: "", unit: "", unitPrice: "" },
+      ]);
+    }
   };
 
-  const removeServiceItem = (index: number) => {
-    setServiceItems((prev) => prev.filter((_, i) => i !== index));
+  const removeItem = (index: number) => {
+    setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateServiceItem = (
-    index: number,
-    field: keyof ServiceItem,
-    value: string
-  ) => {
-    setServiceItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+  const updateItem = (index: number, field: keyof DocumentItem, value: string | DocumentItemType) => {
+    setItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== index) return item;
+
+        // Si cambia el tipo de item, resetear campos
+        if (field === "itemType") {
+          const newItemType = value as DocumentItemType;
+          if (newItemType === 0) {
+            return {
+              itemType: 0,
+              description: item.description,
+              hours: "",
+              hourlyRate: "",
+            };
+          } else {
+            return {
+              itemType: 1,
+              description: item.description,
+              quantity: "",
+              unit: "",
+              unitPrice: "",
+            };
+          }
+        }
+
+        return { ...item, [field]: value };
+      })
     );
   };
 
@@ -92,19 +140,47 @@ export function QuotationFormModal({
 
     if (!request) return;
 
-    const validItems = serviceItems
-      .map((item) => ({
-        description: item.description.trim(),
-        hours: parseFloat(item.hours || "0") || 0,
-        rate: parseFloat(item.rate || "0") || 0,
-      }))
-      .filter((item) => item.description && item.hours > 0 && item.rate > 0);
+    // Validate and convert items
+    const validItems: CreateDocumentItemDto[] = [];
+
+    for (const item of items) {
+      if (!item.description.trim()) continue;
+
+      if (item.itemType === 0) {
+        // Service item
+        const hours = parseFloat(item.hours || "0");
+        const hourlyRate = parseFloat(item.hourlyRate || "0");
+
+        if (hours > 0 && hourlyRate > 0) {
+          validItems.push({
+            itemType: 0,
+            description: item.description.trim(),
+            hours,
+            hourlyRate,
+          });
+        }
+      } else {
+        // Material item
+        const quantity = parseFloat(item.quantity || "0");
+        const unitPrice = parseFloat(item.unitPrice || "0");
+
+        if (quantity > 0 && unitPrice > 0 && item.unit?.trim()) {
+          validItems.push({
+            itemType: 1,
+            description: item.description.trim(),
+            quantity,
+            unit: item.unit.trim(),
+            unitPrice,
+          });
+        }
+      }
+    }
 
     if (validItems.length === 0) {
       await Swal.fire({
         icon: "warning",
         title: "Items requeridos",
-        text: "Agrega al menos un item con descripción, horas y tarifa válidas",
+        text: "Agrega al menos un item válido con todos los campos completos",
       });
       return;
     }
@@ -113,15 +189,19 @@ export function QuotationFormModal({
       setLoading(true);
       await onSubmit({
         requestId: request.requestId,
+        clientId: request.clientId,
+        contractorId: request.contractorId,
         kind: documentType,
         items: validItems,
         notes: notes.trim(),
         total,
       });
 
+      const docTypeName = documentType === 0 ? "Cotización" : "Factura";
+
       await Swal.fire({
         icon: "success",
-        title: `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} enviada`,
+        title: `${docTypeName} enviada`,
         html: `
           <div style="text-align:left">
             <p><b>Cliente:</b> ${request.clientName}</p>
@@ -132,9 +212,9 @@ export function QuotationFormModal({
       });
 
       // Reset form
-      setServiceItems([{ description: "", hours: "", rate: "" }]);
+      setItems([{ itemType: 0, description: "", hours: "", hourlyRate: "" }]);
       setNotes("");
-      setDocumentType("cotizacion");
+      setDocumentType(0);
       onClose();
     } catch (error: any) {
       console.error("Error sending document:", error);
@@ -148,14 +228,15 @@ export function QuotationFormModal({
     }
   };
 
-  const getDocumentIcon = (type: DocumentKind) => {
-    switch (type) {
-      case "cotizacion":
-        return <Calculator className="w-4 h-4" />;
-      case "factura":
-        return <Receipt className="w-4 h-4" />;
-      case "proforma":
-        return <FileCheck className="w-4 h-4" />;
+  const getItemSubtotal = (item: DocumentItem): number => {
+    if (item.itemType === 0) {
+      const h = parseFloat(item.hours || "0") || 0;
+      const r = parseFloat(item.hourlyRate || "0") || 0;
+      return h * r;
+    } else {
+      const q = parseFloat(item.quantity || "0") || 0;
+      const p = parseFloat(item.unitPrice || "0") || 0;
+      return q * p;
     }
   };
 
@@ -163,7 +244,7 @@ export function QuotationFormModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -179,42 +260,26 @@ export function QuotationFormModal({
             {/* Document Type Selector */}
             <div className="space-y-2">
               <Label>Tipo de Documento</Label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <Button
                   type="button"
-                  variant={documentType === "cotizacion" ? "default" : "outline"}
+                  variant={documentType === 0 ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setDocumentType("cotizacion")}
-                  className={
-                    documentType === "cotizacion" ? "bg-green-600 hover:bg-green-700" : ""
-                  }
+                  onClick={() => setDocumentType(0)}
+                  className={documentType === 0 ? "bg-green-600 hover:bg-green-700" : ""}
                 >
-                  {getDocumentIcon("cotizacion")}
-                  <span className="ml-1">Cotización</span>
+                  <Calculator className="w-4 h-4 mr-1" />
+                  Cotización
                 </Button>
                 <Button
                   type="button"
-                  variant={documentType === "factura" ? "default" : "outline"}
+                  variant={documentType === 1 ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setDocumentType("factura")}
-                  className={
-                    documentType === "factura" ? "bg-green-600 hover:bg-green-700" : ""
-                  }
+                  onClick={() => setDocumentType(1)}
+                  className={documentType === 1 ? "bg-green-600 hover:bg-green-700" : ""}
                 >
-                  {getDocumentIcon("factura")}
-                  <span className="ml-1">Factura</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant={documentType === "proforma" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDocumentType("proforma")}
-                  className={
-                    documentType === "proforma" ? "bg-green-600 hover:bg-green-700" : ""
-                  }
-                >
-                  {getDocumentIcon("proforma")}
-                  <span className="ml-1">Proforma</span>
+                  <Receipt className="w-4 h-4 mr-1" />
+                  Factura
                 </Button>
               </div>
             </div>
@@ -227,7 +292,7 @@ export function QuotationFormModal({
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Descripción:</span>
-                <span className="font-medium text-right">{request.description}</span>
+                <span className="font-medium text-right max-w-[60%]">{request.description}</span>
               </div>
               {request.scheduledVisitDate && (
                 <div className="flex justify-between">
@@ -240,26 +305,56 @@ export function QuotationFormModal({
               )}
             </div>
 
-            {/* Service Items */}
+            {/* Items */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label>Servicios y Mano de Obra</Label>
-                <Button type="button" variant="outline" size="sm" onClick={addServiceItem}>
-                  <Plus className="w-4 h-4 mr-1" />
-                  Agregar Item
-                </Button>
+                <Label>Detalle de Servicios y Materiales</Label>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => addItem(0)}>
+                    <Wrench className="w-4 h-4 mr-1" />
+                    Servicio
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => addItem(1)}>
+                    <Package className="w-4 h-4 mr-1" />
+                    Material
+                  </Button>
+                </div>
               </div>
 
-              {serviceItems.map((item, index) => (
-                <div key={index} className="bg-gray-50 rounded-lg p-3 space-y-3">
+              {items.map((item, index) => (
+                <div key={index} className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
                   <div className="flex justify-between items-center">
-                    <h5 className="font-medium text-sm">Item {index + 1}</h5>
-                    {serviceItems.length > 1 && (
+                    <div className="flex items-center gap-2">
+                      <h5 className="font-medium text-sm">Item {index + 1}</h5>
+                      <Select
+                        value={item.itemType.toString()}
+                        onValueChange={(value) => updateItem(index, "itemType", parseInt(value) as DocumentItemType)}
+                      >
+                        <SelectTrigger className="w-[140px] h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">
+                            <div className="flex items-center gap-2">
+                              <Wrench className="w-3 h-3" />
+                              Servicio
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="1">
+                            <div className="flex items-center gap-2">
+                              <Package className="w-3 h-3" />
+                              Material
+                            </div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {items.length > 1 && (
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => removeServiceItem(index)}
+                        onClick={() => removeItem(index)}
                       >
                         <XCircle className="w-4 h-4 text-red-500" />
                       </Button>
@@ -268,34 +363,61 @@ export function QuotationFormModal({
 
                   <div className="space-y-2">
                     <Input
-                      placeholder="Descripción del servicio"
+                      placeholder="Descripción del item"
                       value={item.description}
-                      onChange={(e) =>
-                        updateServiceItem(index, "description", e.target.value)
-                      }
+                      onChange={(e) => updateItem(index, "description", e.target.value)}
                     />
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        placeholder="Horas"
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        value={item.hours}
-                        onChange={(e) => updateServiceItem(index, "hours", e.target.value)}
-                      />
-                      <Input
-                        placeholder="Tarifa/hora ($)"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={item.rate}
-                        onChange={(e) => updateServiceItem(index, "rate", e.target.value)}
-                      />
-                    </div>
 
-                    {item.hours && item.rate && (
+                    {item.itemType === 0 ? (
+                      // Service fields
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          placeholder="Horas"
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          value={item.hours}
+                          onChange={(e) => updateItem(index, "hours", e.target.value)}
+                        />
+                        <Input
+                          placeholder="Tarifa/hora ($)"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.hourlyRate}
+                          onChange={(e) => updateItem(index, "hourlyRate", e.target.value)}
+                        />
+                      </div>
+                    ) : (
+                      // Material fields
+                      <div className="grid grid-cols-3 gap-2">
+                        <Input
+                          placeholder="Cantidad"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(index, "quantity", e.target.value)}
+                        />
+                        <Input
+                          placeholder="Unidad (kg, m, etc.)"
+                          value={item.unit}
+                          onChange={(e) => updateItem(index, "unit", e.target.value)}
+                        />
+                        <Input
+                          placeholder="Precio/unidad ($)"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.unitPrice}
+                          onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
+                        />
+                      </div>
+                    )}
+
+                    {getItemSubtotal(item) > 0 && (
                       <div className="text-right text-sm font-medium text-green-600">
-                        Subtotal: ${(parseFloat(item.hours) * parseFloat(item.rate)).toFixed(2)}
+                        Subtotal: ${getItemSubtotal(item).toFixed(2)}
                       </div>
                     )}
                   </div>
@@ -337,9 +459,7 @@ export function QuotationFormModal({
               disabled={loading || total <= 0}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              {loading
-                ? "Enviando..."
-                : `Enviar ${documentType.charAt(0).toUpperCase() + documentType.slice(1)}`}
+              {loading ? "Enviando..." : `Enviar ${documentType === 0 ? "Cotización" : "Factura"}`}
             </Button>
           </DialogFooter>
         </form>

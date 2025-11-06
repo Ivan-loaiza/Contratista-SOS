@@ -6,7 +6,7 @@ import { Badge } from "../ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import {
   MapPin,
-  Clock,
+  //Clock,
   DollarSign,
   Calendar,
   FileText,

@@ -68,14 +68,14 @@ export function AcceptRequestModal({
         visitNotes: visitNotes.trim(),
       });
 
-      // Limpiar formulario
+      // Limpiar formulario y cerrar - el onAccept ya manejó todo
       setVisitDate("");
       setVisitTime("");
       setVisitNotes("");
+      setLoading(false);
       onClose();
     } catch (error) {
       console.error("Error accepting request:", error);
-    } finally {
       setLoading(false);
     }
   };

@@ -103,30 +103,56 @@ export async function getContractorsByService(
 }
 
 /**
- * Obtiene todos los contratistas de todos los servicios
+ * Obtiene todos los contratistas de todos los servicios con estadísticas completas
  */
 export async function getAllContractorsFromAllServices(): Promise<ContractorByService[]> {
-  const response = await apiClient.get("/ContractorService/service");
+  const response = await apiClient.get("/Contractor");
+  const contractors: ContractorWithRating[] = response.data;
 
-  const apiResponse = response.data;
-
-  if (!apiResponse.isSuccess || !apiResponse.data) {
+  if (!contractors || contractors.length === 0) {
     return [];
   }
 
-  return apiResponse.data.map((fullName: string) => ({
-    contractorId: 0,
-    fullName: fullName,
-    email: '',
-    phone: '',
-    avatarUrl: null,
-    serviceId: 0,
-    serviceName: 'Todos los servicios',
-    averageRating: 0,
-    totalRatings: 0,
-    completedServicesOfThisType: 0,
-    lastServiceDate: null,
-  }));
+  // Transformar ContractorWithRating[] a ContractorByService[]
+  // Creando una entrada por cada servicio que ofrece el contratista
+  const result: ContractorByService[] = [];
+
+  contractors.forEach((contractor) => {
+    if (contractor.services && contractor.services.length > 0) {
+      contractor.services.forEach((service) => {
+        result.push({
+          contractorId: contractor.contractorId,
+          fullName: contractor.fullName,
+          email: contractor.email,
+          phone: contractor.phone,
+          avatarUrl: contractor.avatarUrl,
+          serviceId: service.serviceId,
+          serviceName: service.serviceName,
+          averageRating: contractor.averageRating,
+          totalRatings: contractor.totalRatings,
+          completedServicesOfThisType: contractor.completedServices,
+          lastServiceDate: null, // Este dato no está disponible en ContractorWithRating
+        });
+      });
+    } else {
+      // Si no tiene servicios, crear una entrada sin servicio específico
+      result.push({
+        contractorId: contractor.contractorId,
+        fullName: contractor.fullName,
+        email: contractor.email,
+        phone: contractor.phone,
+        avatarUrl: contractor.avatarUrl,
+        serviceId: 0,
+        serviceName: 'Sin servicio asignado',
+        averageRating: contractor.averageRating,
+        totalRatings: contractor.totalRatings,
+        completedServicesOfThisType: contractor.completedServices,
+        lastServiceDate: null,
+      });
+    }
+  });
+
+  return result;
 }
 
 /**

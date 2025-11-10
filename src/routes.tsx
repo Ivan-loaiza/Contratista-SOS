@@ -2,7 +2,7 @@
 import { Route, Routes, Navigate } from 'react-router-dom';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import ClientDashboard from './components/client/ClientDashboard';
-import { ContractorDashboard } from './components/ContractorDashboard'; // 👈 asegúrate del nombre del archivo
+import { ContractorDashboard } from './components/contractor/ContractorDashboard';
 import { useAuth } from './context/AuthContext';
 import { ClientDashboardProvider } from './context/ClientDashboardContext';
 

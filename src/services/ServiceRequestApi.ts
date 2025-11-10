@@ -2,7 +2,7 @@
 import axios from "axios";
 
 export const API = axios.create({
-  baseURL: "https://localhost:7095/api",
+  baseURL: `${import.meta.env.VITE_API_BASE_URL || "https://render-deploy-latest.onrender.com"}/api`,
   headers: { "Content-Type": "application/json" },
 });
 
@@ -43,6 +43,9 @@ export interface ServiceRequestDto {
 export interface AcceptServiceRequestPayload {
   contractorId: number;
   contractorName: string;
+  scheduledVisitDate?: string; // ISO format, opcional
+  scheduledVisitTime?: string; // Opcional
+  visitNotes?: string; // Opcional
 }
 export interface AcceptServiceRequestResponse {
   ok: boolean;
@@ -63,11 +66,87 @@ export async function getServiceRequests(): Promise<ServiceRequestDto[]> {
   return res.data;
 }
 
-/** 🔹 Export nombrada que te falta */
+/** 🔹 Aceptar solicitud (Contratista) */
 export async function acceptServiceRequest(
   requestId: number,
   payload: AcceptServiceRequestPayload
 ): Promise<AcceptServiceRequestResponse> {
   const res = await API.post(`/ServiceRequest/${requestId}/accept`, payload);
   return res.data as AcceptServiceRequestResponse;
+}
+
+/** 🔹 Cancelar solicitud (Cliente) */
+export async function cancelServiceRequest(requestId: number, clientId: number): Promise<{ message: string }> {
+  const res = await API.post(`/ServiceRequest/${requestId}/cancel`, { clientId });
+  return res.data;
+}
+
+/** 🔹 Marcar como finalizado (Contratista) */
+export async function markServiceRequestCompleted(requestId: number, contractorId: number): Promise<{ message: string }> {
+  const res = await API.post(`/ServiceRequest/${requestId}/mark-completed`, { contractorId });
+  return res.data;
+}
+
+/** 🔹 Registrar pago (Cliente) */
+export async function registerPayment(
+  requestId: number,
+  payload: { clientId: number; paymentMethod: string; paymentProofUrl?: string }
+): Promise<{ message: string }> {
+  const res = await API.post(`/ServiceRequest/${requestId}/register-payment`, payload);
+  return res.data;
+}
+
+/** 🔹 Programar visita (Contratista) */
+export async function scheduleVisit(
+  requestId: number,
+  payload: {
+    contractorId: number;
+    visitDate: string;
+    visitTime: string;
+    notes?: string;
+  }
+): Promise<{ message: string }> {
+  const res = await API.post(`/ServiceRequest/${requestId}/schedule-visit`, payload);
+  return res.data;
+}
+
+/** 🔹 Interfaz para solicitudes del contratista */
+export interface ContractorServiceRequest {
+  requestId: number;
+  clientId: number;
+  clientName: string;
+  contractorId: number;
+  contractorName: string;
+  contractorAvatarUrl: string | null;
+  serviceId: number;
+  serviceName: string;
+  description: string;
+  location: string;
+  urgency: string;
+  additionalDetails: string;
+  budget: string;
+  requestDate: string;
+  serviceDate: string | null;
+  isActive: boolean;
+  status: string; // "Pendiente" | "Aceptada" | "Finalizada" | "Cancelada"
+  scheduledVisitDate: string | null;
+  scheduledVisitTime: string | null;
+  visitNotes: string | null;
+  hasRating: boolean;
+  ratingStars: number | null;
+  // Campos adicionales que pueden venir del backend
+  proformaDocumentUrl?: string | null;
+  completedDate?: string | null;
+  paymentStatus?: string | null;
+  paymentProofUrl?: string | null;
+  acceptedDate?: string | null;
+  proformaUploadedDate?: string | null;
+  paidDate?: string | null;
+  paymentMethod?: string | null;
+}
+
+/** 🔹 Obtener solicitudes del contratista */
+export async function getContractorRequests(contractorId: number): Promise<ContractorServiceRequest[]> {
+  const res = await API.get(`/ServiceRequest/by-contractor/${contractorId}`);
+  return res.data;
 }

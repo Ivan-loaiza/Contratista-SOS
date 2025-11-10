@@ -1,9 +1,9 @@
 // src/services/DocumentApi.ts
 import axios from "axios";
 
-/** Ajusta la base según tu .env o deja el fallback al https local */
+/** Ajusta la base según tu .env o deja el fallback al backend desplegado */
 const API_BASE =
-  import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "https://localhost:7095";
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "") || "https://render-deploy-latest.onrender.com";
 
 /** Tipos de documento soportados por el backend */
 // Para enviar al backend (números)

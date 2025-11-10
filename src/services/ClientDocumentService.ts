@@ -6,7 +6,7 @@ import type { Document, DocumentStatus, ClientDocumentDto } from "@/types/docume
  */
 const API = axios.create({
   baseURL:
-    import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "https://localhost:7095/api",
+    import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "") || "https://render-deploy-latest.onrender.com",
   headers: {
     "Content-Type": "application/json",
   },

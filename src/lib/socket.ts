@@ -2,7 +2,7 @@
 import * as signalR from "@microsoft/signalr";
 
 export function createSocket() {
-  const base = import.meta.env.VITE_API_BASE_URL ?? "https://localhost:7095";
+  const base = import.meta.env.VITE_API_BASE_URL ?? "https://render-deploy-latest.onrender.com";
   return new signalR.HubConnectionBuilder()
     .withUrl(`${base}/hubs/notifications`, {
       accessTokenFactory: () => localStorage.getItem("token") ?? "",

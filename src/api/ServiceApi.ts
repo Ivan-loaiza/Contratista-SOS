@@ -10,8 +10,8 @@ export interface ServiceDto {
   createdAt: string; // ISO format
 }
 
-// Puedes mover esta URL a una variable de entorno si lo deseas
-const BASE_URL = "https://localhost:7095/api/Service";
+// Usa la variable de entorno para la URL base
+const BASE_URL = `${import.meta.env.VITE_API_BASE_URL || "https://render-deploy-latest.onrender.com"}/api/Service`;
 
 export async function fetchServices(): Promise<ServiceDto[]> {
   const response = await fetch(BASE_URL);

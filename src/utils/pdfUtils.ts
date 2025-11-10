@@ -6,7 +6,7 @@
  * Obtiene la URL base de la API desde las variables de entorno
  */
 const getApiBaseUrl = (): string => {
-  return import.meta.env.VITE_API_URL?.replace(/\/api\/?$/, "") || "https://localhost:7095";
+  return import.meta.env.VITE_API_BASE_URL?.replace(/\/api\/?$/, "") || "https://render-deploy-latest.onrender.com";
 };
 
 /**

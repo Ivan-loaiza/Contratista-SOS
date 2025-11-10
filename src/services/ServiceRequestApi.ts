@@ -2,7 +2,7 @@
 import axios from "axios";
 
 export const API = axios.create({
-  baseURL: "https://localhost:7095/api",
+  baseURL: `${import.meta.env.VITE_API_BASE_URL || "https://render-deploy-latest.onrender.com"}/api`,
   headers: { "Content-Type": "application/json" },
 });
 

@@ -91,7 +91,7 @@ export const RegisterPaymentModal = ({
       await registerPayment(request.requestId, {
         clientId,
         paymentMethod,
-        paymentProofUrl: paymentMethod === "Transferencia" ? finalProofUrl : null,
+        paymentProofUrl: paymentMethod === "Transferencia" ? finalProofUrl : undefined,
       });
 
       toast.success("Pago registrado exitosamente");

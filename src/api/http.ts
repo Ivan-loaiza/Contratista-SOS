@@ -5,6 +5,8 @@ function normalizeBaseUrl(raw?: string) {
   let url = raw ?? 'https://render-deploy-latest.onrender.com';
   url = url.replace(/\/+$/, '');
   if (!/\/api$/i.test(url)) url = `${url}/api`;
+  console.log('🔧 [DEBUG] VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+  console.log('🔧 [DEBUG] normalizeBaseUrl result:', url);
   return url;
 }
 

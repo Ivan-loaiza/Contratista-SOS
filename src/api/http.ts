@@ -2,14 +2,14 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
 
 function normalizeBaseUrl(raw?: string) {
-  let url = raw ?? 'https://localhost:7095';
+  let url = raw ?? 'https://render-deploy-latest.onrender.com';
   url = url.replace(/\/+$/, '');
   if (!/\/api$/i.test(url)) url = `${url}/api`;
   return url;
 }
 
 const http = axios.create({
-  baseURL: normalizeBaseUrl(import.meta.env.VITE_API_URL),
+  baseURL: normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL),
   headers: { 'Content-Type': 'application/json' },
   withCredentials: false,
 });

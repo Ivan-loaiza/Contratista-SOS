@@ -30,6 +30,7 @@ import { createServiceRequest, type CreateServiceRequestDto } from "@/services/S
 import { createSocket } from "@/lib/socket";
 import Swal from "sweetalert2";
 import { listDocumentsForClient } from "@/services/ClientDocumentService";
+import { fetchServices, type ServiceDto } from "@/api/ServiceApi";
 
 
 type ClientDocumentDto = {
@@ -61,15 +62,17 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
   const [activeTab, setActiveTab] = useState("home");
   const [serviceRequest, setServiceRequest] = useState<"idle" | "searching" | "found" | "in-progress">("idle");
   const [searchProgress, setSearchProgress] = useState(0);
+  const [services, setServices] = useState<ServiceDto[]>([]);
 
   // 🧭 campos controlados del formulario
-  const [serviceId, setServiceId] = useState<number>(1);
+  const [serviceId, setServiceId] = useState<number>(0);
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [urgency, setUrgency] = useState<"Alta" | "Media" | "Baja">("Alta");
   const [estimatedDuration, setEstimatedDuration] = useState("2 horas");
   const [budget, setBudget] = useState("$150");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // 📄 Documentos del cliente
   const [docs, setDocs] = useState<ClientDocumentDto[]>([]);
@@ -79,6 +82,17 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
   const socketRef = useRef<ReturnType<typeof createSocket> | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [acceptedBy, setAcceptedBy] = useState<string | null>(null);
+
+  // Cargar servicios
+  useEffect(() => {
+    fetchServices()
+      .then(setServices)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <p>Cargando servicios...</p>;
+  if (error) return <p>Error: {error}</p>;
 
   // redirección si no hay sesión
   useEffect(() => {
@@ -176,65 +190,102 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
     setNotice(null);
   }
 
-  const handleRequestService = async () => {
-    if (!user?.userId) {
-      navigate("/login");
-      return;
-    }
-    if (!description.trim() || !location.trim()) {
-      await Swal.fire({
+ const handleRequestService = async () => {
+  if (!user?.userId) {
+    navigate("/login");
+    return;
+  }
+
+  if (
+    serviceId === 0 ||
+    !description.trim() ||
+    !location.trim() ||
+    !estimatedDuration.trim() ||
+    !budget.trim()
+  ) {
+    await Swal.fire({
+      icon: "info",
+      title: "Campos incompletos",
+      text: "Por favor completa todos los campos requeridos antes de continuar.",
+    });
+    return;
+  }
+
+  setLoading(true);
+  let interval: number | undefined;
+
+  try {
+    const payload: CreateServiceRequestDto = {
+      clientId: user.userId,
+      serviceId,
+      contractorId: null,
+      description: description.trim(),
+      location: location.trim(),
+      urgency,
+      estimatedDuration,
+      budget,
+      requestDate: new Date().toISOString(),
+      serviceDate: null,
+      isActive: true,
+    };
+
+    await createServiceRequest(payload);
+
+    // ✅ Cambio para 2.3 - Mostrar éxito antes de buscar contratista
+    await Swal.fire({
+      icon: "success",
+      title: "Solicitud enviada",
+      text: "Tu solicitud fue registrada correctamente. Estamos buscando contratistas.",
+    });
+
+    setServiceRequest("searching");
+    setSearchProgress(0);
+
+    interval = window.setInterval(() => {
+      setSearchProgress((prev) => {
+        if (prev >= 100) {
+          if (interval) window.clearInterval(interval);
+          setServiceRequest("found");
+          return 100;
+        }
+        return prev + 12;
+      });
+    }, 250);
+  } catch (err: any) {
+    console.error("Error creando la solicitud", err);
+    await Swal.fire({
+      icon: "error",
+      title: "No pudimos crear la solicitud",
+      text: err?.response?.data?.message ?? "Intenta de nuevo.",
+    });
+  } finally {
+    setLoading(false);
+    if (interval) window.clearInterval(interval);
+  }
+};
+
+  useEffect(() => {
+  if (activeTab === "home" && serviceRequest !== "idle") {
+    setTimeout(() => {
+      Swal.fire({
+        toast: true,
+        position: "top-end",
         icon: "info",
-        title: "Campos incompletos",
-        text: "Por favor completa la descripción y la ubicación.",
+        title:
+          serviceRequest === "searching"
+            ? "Buscando contratistas aún..."
+            : serviceRequest === "in-progress"
+            ? "Tienes un servicio en progreso"
+            : "Solicitud activa",
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
       });
-      return;
-    }
+    }, 500); // Pequeño delay para no estorbar animaciones
+  }
+}, [activeTab, serviceRequest]);
 
-    setLoading(true);
-    let interval: number | undefined;
 
-    try {
-      const payload: CreateServiceRequestDto = {
-        clientId: user.userId,
-        serviceId,
-        contractorId: null,
-        description: description.trim(),
-        location: location.trim(),
-        urgency,
-        estimatedDuration,
-        budget,
-        requestDate: new Date().toISOString(),
-        serviceDate: null,
-        isActive: true,
-      };
-
-      await createServiceRequest(payload);
-
-      setServiceRequest("searching");
-      setSearchProgress(0);
-
-      interval = window.setInterval(() => {
-        setSearchProgress((prev) => {
-          if (prev >= 100) {
-            if (interval) window.clearInterval(interval);
-            setServiceRequest("found");
-            return 100;
-          }
-          return prev + 12;
-        });
-      }, 250);
-    } catch (err: any) {
-      console.error("Error creando la solicitud", err);
-      await Swal.fire({
-        icon: "error",
-        title: "No pudimos crear la solicitud",
-        text: err?.response?.data?.message ?? "Intenta de nuevo.",
-      });
-    } finally {
-      setLoading(false);
-      if (interval) window.clearInterval(interval);
-    }
-  };
 
   const handleAcceptContractor = () => {
     setServiceRequest("in-progress");
@@ -353,17 +404,19 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
                     <>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Tipo de Servicio</label>
-                        <select
-                          className="w-full p-3 border rounded-lg"
-                          value={serviceId}
-                          onChange={(e) => setServiceId(Number(e.target.value))}
-                        >
-                          <option value={1}>Fontanería</option>
-                          <option value={2}>Electricidad</option>
-                          <option value={3}>Pintura</option>
-                          <option value={4}>Construcción</option>
-                          <option value={5}>Reparaciones</option>
-                        </select>
+                       <select
+                        className="w-full p-3 border rounded-lg"
+                        value={serviceId}
+                        onChange={(e) => setServiceId(Number(e.target.value))}
+                      >
+                        <option value={0} disabled>Selecciona un servicio</option>
+                        {services.map((service) => (
+                          <option key={service.serviceId} value={service.serviceId}>
+                            {service.name}
+                          </option>
+                        ))}
+                      </select>
+
                       </div>
 
                       <div className="space-y-2">
@@ -817,3 +870,4 @@ export default function ClientDashboard({ onLogout }: ClientDashboardProps) {
     </div>
   );
 }
+

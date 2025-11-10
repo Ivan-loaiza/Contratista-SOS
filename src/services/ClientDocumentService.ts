@@ -1,32 +1,88 @@
 import axios from "axios";
+import type { Document, DocumentStatus, ClientDocumentDto } from "@/types/document";
 
-/** Ajusta tu base de API desde las variables de entorno */
-const API_BASE =
-  import.meta.env.VITE_API_URL?.replace(/\/+$/, "") || "https://localhost:7095";
+/**
+ * ⚙️ Configuración de Axios con interceptor para token
+ */
+const API = axios.create({
+  baseURL:
+    import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "") || "https://render-deploy-latest.onrender.com",
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
-/** Tipos de documento */
-export type DocKind = "cotizacion" | "factura" | "proforma";
+// 🔐 Adjunta el token JWT en cada request
+API.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
-/** Estado del documento */
-export type DocumentStatus = "Pendiente" | "Pagada" | "Enviada" | "Revisión";
-
-/** Documento recibido por cliente */
-export interface ClientDocumentDto {
-  id: number;
-  requestId: number;
-  kind: DocKind;
-  clientName: string;
-  amount: number;
-  date: string; // ISO
-  status: DocumentStatus;
-  pdfUrl?: string | null;
+/**
+ * 📄 Obtiene todos los documentos del cliente autenticado
+ * ✅ Ruta real confirmada por Swagger:
+ * GET /api/Documents/mine?clientId={clientId}
+ * @returns {ClientDocumentDto[]} Array de documentos simplificados
+ */
+export async function listDocumentsForClient(clientId: number): Promise<ClientDocumentDto[]> {
+  const url = `/Documents/mine?clientId=${clientId}`;
+  const res = await API.get<ClientDocumentDto[]>(url);
+  return res.data;
 }
 
 /**
- * Obtiene los documentos asociados a un cliente autenticado
+ * 🧰 Obtiene todos los documentos de un contratista
+ * GET /api/Documents/contractor/{contractorId}
  */
-export async function listDocumentsForClient(clientId: number) {
-  const url = `${API_BASE}/api/Documents/mine?clientId=${clientId}`;
-  const res = await axios.get(url);
-  return res.data as ClientDocumentDto[];
+export async function listDocumentsForContractor(contractorId: number): Promise<Document[]> {
+  const url = `/Documents/contractor/${contractorId}`;
+  const res = await API.get(url);
+  return res.data as Document[];
+}
+
+/**
+ * 🔍 Obtiene un documento específico por ID
+ * GET /api/Documents/{documentId}
+ */
+export async function getDocumentById(documentId: number): Promise<Document> {
+  const url = `/Documents/${documentId}`;
+  const res = await API.get(url);
+  return res.data as Document;
+}
+
+/**
+ * 🔄 Actualiza el estado de un documento (p. ej. "Pagada", "Enviada", etc.)
+ * PUT /api/Documents/{documentId}/status
+ */
+export async function updateDocumentStatus(
+  documentId: number,
+  status: DocumentStatus
+): Promise<Document> {
+  const url = `/Documents/${documentId}/status`;
+  const res = await API.put(url, { status });
+  return res.data as Document;
+}
+
+/**
+ * ➕ Crea un nuevo documento (Cotización, Factura o Proforma)
+ * POST /api/Documents
+ */
+export async function createDocument(
+  payload: Omit<Document, "documentId" | "createdAt">
+): Promise<Document> {
+  const url = `/Documents`;
+  const res = await API.post(url, payload);
+  return res.data as Document;
+}
+
+/**
+ * ❌ Elimina un documento (solo para pruebas o administración)
+ * DELETE /api/Documents/{documentId}
+ */
+export async function deleteDocument(documentId: number): Promise<void> {
+  const url = `/Documents/${documentId}`;
+  await API.delete(url);
 }

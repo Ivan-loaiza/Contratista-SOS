@@ -298,7 +298,7 @@ export function QuotationFormModal({
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" sideOffset={5}>
                   <SelectItem value="USD">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">$</span>

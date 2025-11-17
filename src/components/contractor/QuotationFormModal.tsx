@@ -52,11 +52,17 @@ export function QuotationFormModal({
   onSubmit,
 }: QuotationFormModalProps) {
   const [documentType, setDocumentType] = useState<DocumentKind>(0); // 0 = Cotizacion
+  const [currency, setCurrency] = useState<"USD" | "CRC">("USD"); // USD = Dólares, CRC = Colones
   const [items, setItems] = useState<DocumentItem[]>([
     { itemType: 0, description: "", hours: "", hourlyRate: "" },
   ]);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Get currency symbol
+  const getCurrencySymbol = () => {
+    return currency === "USD" ? "$" : "₡";
+  };
 
   // Pre-fill notes when request changes
   useState(() => {
@@ -205,7 +211,7 @@ export function QuotationFormModal({
         html: `
           <div style="text-align:left">
             <p><b>Cliente:</b> ${request.clientName}</p>
-            <p><b>Total:</b> $${total.toFixed(2)}</p>
+            <p><b>Total:</b> ${getCurrencySymbol()}${total.toFixed(2)}</p>
             <p class="mt-2">El cliente recibirá el documento.</p>
           </div>
         `,
@@ -215,6 +221,7 @@ export function QuotationFormModal({
       setItems([{ itemType: 0, description: "", hours: "", hourlyRate: "" }]);
       setNotes("");
       setDocumentType(0);
+      setCurrency("USD");
       onClose();
     } catch (error: any) {
       console.error("Error sending document:", error);
@@ -282,6 +289,30 @@ export function QuotationFormModal({
                   Factura
                 </Button>
               </div>
+            </div>
+
+            {/* Currency Selector */}
+            <div className="space-y-2">
+              <Label>Tipo de Moneda</Label>
+              <Select value={currency} onValueChange={(value) => setCurrency(value as "USD" | "CRC")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" sideOffset={5}>
+                  <SelectItem value="USD">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">$</span>
+                      Dólares (USD)
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="CRC">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">₡</span>
+                      Colones (CRC)
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Service Summary */}
@@ -380,7 +411,7 @@ export function QuotationFormModal({
                           onChange={(e) => updateItem(index, "hours", e.target.value)}
                         />
                         <Input
-                          placeholder="Tarifa/hora ($)"
+                          placeholder={`Tarifa/hora (${getCurrencySymbol()})`}
                           type="number"
                           step="0.01"
                           min="0"
@@ -405,7 +436,7 @@ export function QuotationFormModal({
                           onChange={(e) => updateItem(index, "unit", e.target.value)}
                         />
                         <Input
-                          placeholder="Precio/unidad ($)"
+                          placeholder={`Precio/unidad (${getCurrencySymbol()})`}
                           type="number"
                           step="0.01"
                           min="0"
@@ -417,7 +448,7 @@ export function QuotationFormModal({
 
                     {getItemSubtotal(item) > 0 && (
                       <div className="text-right text-sm font-medium text-green-600">
-                        Subtotal: ${getItemSubtotal(item).toFixed(2)}
+                        Subtotal: {getCurrencySymbol()}{getItemSubtotal(item).toFixed(2)}
                       </div>
                     )}
                   </div>
@@ -428,7 +459,7 @@ export function QuotationFormModal({
               <div className="bg-green-50 rounded-lg p-4 border-2 border-green-200">
                 <div className="flex justify-between items-center">
                   <span className="font-semibold text-lg">Total:</span>
-                  <span className="text-2xl font-bold text-green-600">${total.toFixed(2)}</span>
+                  <span className="text-2xl font-bold text-green-600">{getCurrencySymbol()}{total.toFixed(2)}</span>
                 </div>
               </div>
             </div>

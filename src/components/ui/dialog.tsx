@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 
@@ -33,15 +34,17 @@ function DialogClose({
 
 function DialogOverlay({
   className,
+  zIndex,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
+}: React.ComponentProps<typeof DialogPrimitive.Overlay> & { zIndex?: number }) {
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-[9998] bg-black/50 backdrop-blur-sm",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 bg-black/50 backdrop-blur-sm pointer-events-auto",
         className,
       )}
+      style={{ zIndex: zIndex ?? 9998, position: 'fixed' }}
       {...props}
     />
   );
@@ -50,27 +53,68 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
+  zIndex,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
-  return (
-    <DialogPortal data-slot="dialog-portal">
-      <DialogOverlay />
+}: React.ComponentProps<typeof DialogPrimitive.Content> & { zIndex?: number }) {
+  const overlayZIndex = zIndex ?? 9998;
+  const contentZIndex = overlayZIndex + 1;
+  const closeButtonZIndex = contentZIndex + 1;
+
+  // SOLUCIÓN DEFINITIVA: Renderizar directamente en el DOM sin Radix Portal
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  const portalContainer = React.useMemo(() => {
+    if (typeof window === 'undefined') return null;
+
+    // Para z-index alto, usar modal-root dedicado
+    if (zIndex && zIndex > 10000) {
+      let container = document.getElementById('modal-root');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'modal-root';
+        container.style.cssText = 'position: fixed; inset: 0; pointer-events: none; z-index: 999999;';
+        document.body.appendChild(container);
+      }
+      return container;
+    }
+    return document.body;
+  }, [zIndex]);
+
+  if (!mounted || !portalContainer) {
+    return null;
+  }
+
+  const dialogContent = (
+    <>
+      <DialogOverlay zIndex={overlayZIndex} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-[9999] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg pointer-events-auto",
           className,
         )}
+        style={{ zIndex: contentZIndex, position: 'fixed' }}
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none z-[10000] cursor-pointer [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+        <DialogPrimitive.Close
+          className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none cursor-pointer [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+          style={{ zIndex: closeButtonZIndex }}
+        >
           <XIcon />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
-    </DialogPortal>
+    </>
   );
+
+  // Usar React Portal directo en lugar de DialogPrimitive.Portal
+  return createPortal(dialogContent, portalContainer);
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {

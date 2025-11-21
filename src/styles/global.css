@@ -158,3 +158,34 @@
 }
 
 html { font-size: var(--font-size); }
+
+/* Fix z-index for nested modals - CRITICAL FIX */
+#modal-root {
+  position: fixed !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+  z-index: 999999 !important;
+}
+
+#modal-root > * {
+  pointer-events: auto !important;
+}
+
+[data-slot="dialog-overlay"] {
+  position: fixed !important;
+  inset: 0 !important;
+}
+
+[data-slot="dialog-content"] {
+  position: fixed !important;
+  pointer-events: auto !important;
+}
+
+/* Force z-index for high priority modals */
+[data-slot="dialog-portal"] [data-slot="dialog-overlay"] {
+  z-index: inherit !important;
+}
+
+[data-slot="dialog-portal"] [data-slot="dialog-content"] {
+  z-index: inherit !important;
+}

@@ -193,6 +193,14 @@ export function QuotationFormModal({
 
     try {
       setLoading(true);
+
+      // Guardar datos necesarios antes de cerrar el modal
+      const docTypeName = documentType === 0 ? "Cotización" : "Factura";
+      const clientName = request.clientName;
+      const totalAmount = total;
+      const currencySymbol = getCurrencySymbol();
+
+      // Enviar el documento
       await onSubmit({
         requestId: request.requestId,
         clientId: request.clientId,
@@ -203,34 +211,45 @@ export function QuotationFormModal({
         total,
       });
 
-      const docTypeName = documentType === 0 ? "Cotización" : "Factura";
-
-      await Swal.fire({
-        icon: "success",
-        title: `${docTypeName} enviada`,
-        html: `
-          <div style="text-align:left">
-            <p><b>Cliente:</b> ${request.clientName}</p>
-            <p><b>Total:</b> ${getCurrencySymbol()}${total.toFixed(2)}</p>
-            <p class="mt-2">El cliente recibirá el documento.</p>
-          </div>
-        `,
-      });
-
       // Reset form
       setItems([{ itemType: 0, description: "", hours: "", hourlyRate: "" }]);
       setNotes("");
       setDocumentType(0);
       setCurrency("USD");
+
+      // IMPORTANTE: Cerrar el modal PRIMERO
       onClose();
+
+      // Esperar a que el modal se cierre completamente
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Ahora mostrar el SweetAlert (aparecerá al frente)
+      await Swal.fire({
+        icon: "success",
+        title: `${docTypeName} enviada`,
+        html: `
+          <div style="text-align:left">
+            <p><b>Cliente:</b> ${clientName}</p>
+            <p><b>Total:</b> ${currencySymbol}${totalAmount.toFixed(2)}</p>
+            <p class="mt-2">El cliente recibirá el documento.</p>
+          </div>
+        `,
+      });
+
+      setLoading(false);
     } catch (error: any) {
       console.error("Error sending document:", error);
+
+      // En caso de error, también cerrar el modal primero
+      onClose();
+      await new Promise(resolve => setTimeout(resolve, 300));
+
       await Swal.fire({
         icon: "error",
         title: "Error",
         text: error?.response?.data?.message || "No se pudo enviar el documento",
       });
-    } finally {
+
       setLoading(false);
     }
   };
@@ -250,8 +269,8 @@ export function QuotationFormModal({
   if (!request) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={onClose} modal={true}>
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto !z-[99999]" zIndex={99999}>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

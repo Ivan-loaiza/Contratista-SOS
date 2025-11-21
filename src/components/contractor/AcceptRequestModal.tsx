@@ -60,6 +60,18 @@ export function AcceptRequestModal({
       // Convertir la fecha a formato ISO
       const isoDate = new Date(`${visitDate}T${visitTime}`).toISOString();
 
+      // IMPORTANTE: Cerrar el modal PRIMERO
+      onClose();
+
+      // Limpiar formulario
+      setVisitDate("");
+      setVisitTime("");
+      setVisitNotes("");
+
+      // Esperar a que el modal se cierre completamente
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Ahora ejecutar la aceptación (que mostrará el SweetAlert)
       await onAccept({
         contractorId,
         contractorName,
@@ -68,12 +80,7 @@ export function AcceptRequestModal({
         visitNotes: visitNotes.trim(),
       });
 
-      // Limpiar formulario y cerrar - el onAccept ya manejó todo
-      setVisitDate("");
-      setVisitTime("");
-      setVisitNotes("");
       setLoading(false);
-      onClose();
     } catch (error) {
       console.error("Error accepting request:", error);
       setLoading(false);
@@ -83,8 +90,8 @@ export function AcceptRequestModal({
   if (!request) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={onClose} modal={true}>
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto !z-[99999]" zIndex={99999}>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

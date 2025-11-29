@@ -14,6 +14,7 @@ import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Calendar, Clock, FileText, User } from "lucide-react";
 import type { PendingRequest } from "./PendingRequestsList";
+import { ProblemPhotosViewer } from "@/components/shared/ProblemPhotosViewer";
 
 interface AcceptRequestModalProps {
   isOpen: boolean;
@@ -140,6 +141,9 @@ export function AcceptRequestModal({
                 </div>
               )}
             </div>
+
+            {/* Fotos del Problema */}
+            <ProblemPhotosViewer requestId={request.requestId} />
 
             {/* Información del contratista */}
             <div className="bg-blue-50 rounded-lg p-3 text-sm">

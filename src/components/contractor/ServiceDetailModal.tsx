@@ -20,6 +20,7 @@ import {
   //Star,
 } from "lucide-react";
 import type { ContractorServiceRequest } from "@/services/ServiceRequestApi";
+import { ProblemPhotosViewer } from "@/components/shared/ProblemPhotosViewer";
 
 interface ServiceDetailModalProps {
   isOpen: boolean;
@@ -235,6 +236,9 @@ export function ServiceDetailModal({ isOpen, onClose, request }: ServiceDetailMo
               )}
             </div>
           </div>
+
+          {/* Fotos del Problema */}
+          <ProblemPhotosViewer requestId={request.requestId} />
 
           {/* Visit Notes */}
           {request.visitNotes && (

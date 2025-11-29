@@ -150,3 +150,47 @@ export async function getContractorRequests(contractorId: number): Promise<Contr
   const res = await API.get(`/ServiceRequest/by-contractor/${contractorId}`);
   return res.data;
 }
+
+/* ===== FOTOS DE SERVICIO ===== */
+
+/** 🔹 Interfaz para respuesta de foto */
+export interface PhotoResponseDto {
+  photoId: number;
+  requestId: number;
+  uploadedBy: number;
+  uploaderName: string;
+  roleId: number;
+  roleName: string;
+  photoUrl: string;
+  fileName: string;
+  photoType: "Problem" | "Before" | "After";
+  uploadedAt: string;
+}
+
+/** 🔹 Subir fotos del problema (Cliente) */
+export async function uploadProblemPhotos(
+  requestId: number,
+  clientId: number,
+  photos: File[]
+): Promise<PhotoResponseDto[]> {
+  const formData = new FormData();
+  formData.append("RequestId", requestId.toString());
+  formData.append("ClientId", clientId.toString());
+
+  photos.forEach((photo) => {
+    formData.append("Photos", photo);
+  });
+
+  const res = await API.post("/ServiceRequestPhotos/problem", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return res.data;
+}
+
+/** 🔹 Obtener fotos del problema */
+export async function getProblemPhotos(requestId: number): Promise<PhotoResponseDto[]> {
+  const res = await API.get(`/ServiceRequestPhotos/problem/${requestId}`);
+  return res.data;
+}

@@ -17,6 +17,7 @@ import type { CreateServiceRequestDto } from "@/types/service-request";
 import { MapPickerModal } from "./MapPickerModal";
 import { ServiceSelector } from "./ServiceSelector";
 import { ContractorSelector } from "./ContractorSelector";
+import { PhotoUploader } from "./PhotoUploader";
 
 export const ServiceRequestForm = () => {
   const { user } = useAuth();
@@ -38,6 +39,7 @@ export const ServiceRequestForm = () => {
   });
 
   const [addressDetails, setAddressDetails] = useState("");
+  const [problemPhotos, setProblemPhotos] = useState<File[]>([]);
 
   // 🧠 Envío al backend
   const handleSubmit = async () => {
@@ -63,7 +65,7 @@ export const ServiceRequestForm = () => {
     };
     console.log("📦 Payload enviado:", payload);
 
-    await requestService(payload as any);
+    await requestService(payload as any, problemPhotos);
   };
 
   return (
@@ -182,6 +184,13 @@ export const ServiceRequestForm = () => {
                   onChange={(e) => setAddressDetails(e.target.value)}
                 />
               </div>
+
+              {/* Selector de fotos del problema */}
+              <PhotoUploader
+                onPhotosChange={setProblemPhotos}
+                maxPhotos={5}
+                disabled={loading}
+              />
 
               {/* ✅ Botón corregido */}
               <Button

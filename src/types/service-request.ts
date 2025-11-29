@@ -66,3 +66,32 @@ export interface RegisterPaymentDto {
   paymentMethod: "Efectivo" | "Transferencia";
   paymentProofUrl?: string;
 }
+
+/** DTO para subir fotos del problema (Cliente) */
+export interface AddClientProblemPhotosDto {
+  requestId: number;
+  clientId: number;
+  photos: File[];
+}
+
+/** DTO de respuesta para una foto */
+export interface PhotoResponseDto {
+  photoId: number;
+  requestId: number;
+  uploadedBy: number;
+  uploaderName: string;
+  roleId: number;
+  roleName: string;
+  photoUrl: string;
+  fileName: string;
+  photoType: "Problem" | "Before" | "After";
+  uploadedAt: string;
+}
+
+/** DTO de respuesta para fotos agrupadas */
+export interface PhotosGroupedResponseDto {
+  requestId: number;
+  problemPhotos: PhotoResponseDto[];
+  beforePhotos: PhotoResponseDto[];
+  afterPhotos: PhotoResponseDto[];
+}

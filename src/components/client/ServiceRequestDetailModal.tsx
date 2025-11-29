@@ -26,6 +26,7 @@ import { cancelServiceRequest } from "@/services/ServiceRequestApi";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { useState } from "react";
+import { ProblemPhotosViewer } from "@/components/shared/ProblemPhotosViewer";
 
 interface ServiceRequestDetailModalProps {
   isOpen: boolean;
@@ -226,6 +227,9 @@ export const ServiceRequestDetailModal = ({
               </div>
             </div>
           )}
+
+          {/* Fotos del Problema */}
+          <ProblemPhotosViewer requestId={request.requestId} />
 
           {/* Detalles del servicio */}
           <div>

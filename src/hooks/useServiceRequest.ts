@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Swal from "sweetalert2";
-import { createServiceRequest } from "@/services/ServiceRequestApi";
+import { createServiceRequest, uploadProblemPhotos } from "@/services/ServiceRequestApi";
 import type { CreateServiceRequestDto } from "@/types/service-request";
 
 export function useServiceRequest() {
@@ -11,14 +11,32 @@ export function useServiceRequest() {
   const [acceptedBy, setAcceptedBy] = useState<string | null>(null); // ✅ nuevo estado
 
   // 🔹 Enviar solicitud al backend
-  const requestService = async (payload: CreateServiceRequestDto) => {
+  const requestService = async (payload: CreateServiceRequestDto, problemPhotos?: File[]) => {
     try {
       setLoading(true);
       setStatus("searching");
       setProgress(0);
 
       // Llamada a la API (POST /api/ServiceRequests)
-      await createServiceRequest(payload);
+      const response = await createServiceRequest(payload);
+
+      // Si hay fotos, subirlas después de crear la solicitud
+      if (problemPhotos && problemPhotos.length > 0 && response?.requestId) {
+        console.log("📸 Subiendo fotos del problema...");
+        try {
+          await uploadProblemPhotos(response.requestId, payload.clientId, problemPhotos);
+          console.log("✅ Fotos subidas exitosamente");
+        } catch (photoError) {
+          console.error("❌ Error al subir fotos:", photoError);
+          // No bloqueamos la solicitud si fallan las fotos
+          Swal.fire({
+            icon: "warning",
+            title: "Solicitud creada",
+            text: "La solicitud se creó correctamente, pero hubo un error al subir las fotos.",
+            confirmButtonColor: "#2563eb",
+          });
+        }
+      }
 
       // Simulación de búsqueda progresiva (efecto visual)
       let current = 0;
